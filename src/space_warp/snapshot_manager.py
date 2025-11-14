@@ -169,7 +169,15 @@ class SnapshotManager(QObject):
             rows = cursor.fetchall()
             conn.close()
 
-            return [self._row_to_snapshot(row) for row in rows]
+            result: list[Snapshot] = []
+            for row in rows:
+                try:
+                    s = self._row_to_snapshot(row)
+                    if s:
+                        result.append(s)
+                except Exception:
+                    continue
+            return result
 
         except Exception as e:
             print(f"Error getting all snapshots: {e}")

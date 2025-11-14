@@ -22,7 +22,7 @@ from PyQt6.QtWidgets import (
     QDockWidget,
 )
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QAction, QKeySequence
+from PyQt6.QtGui import QAction, QKeySequence, QFont
 from datetime import datetime
 import json
 
@@ -142,6 +142,10 @@ class MainWindow(QMainWindow):
 
         # Window list
         self.window_list = QListWidget()
+        f1 = QFont()
+        f1.setPointSize(16)
+        self.window_list.setFont(f1)
+        self.window_list.setStyleSheet("QListWidget { font-size: 16px; } QListWidget::item { padding: 6px 4px; }")
         self.window_list.itemSelectionChanged.connect(self.on_window_selected)
         layout.addWidget(self.window_list)
 
@@ -167,6 +171,10 @@ class MainWindow(QMainWindow):
 
         # Snapshot list
         self.snapshot_list = QListWidget()
+        f2 = QFont()
+        f2.setPointSize(16)
+        self.snapshot_list.setFont(f2)
+        self.snapshot_list.setStyleSheet("QListWidget { font-size: 16px; } QListWidget::item { padding: 6px 4px; }")
         self.snapshot_list.itemSelectionChanged.connect(self.on_snapshot_selected)
         self.snapshot_list.itemDoubleClicked.connect(self.restore_selected_snapshot)
         layout.addWidget(self.snapshot_list)
@@ -251,6 +259,12 @@ class MainWindow(QMainWindow):
             )
             self.snapshot_manager.snapshot_restored.connect(
                 lambda name: self.append_debug_log(f"SNAPSHOT OK {name}")
+            )
+            self.snapshot_manager.snapshot_saved.connect(
+                lambda name: (self.load_snapshots(), self.select_snapshot_by_name(name))
+            )
+            self.snapshot_manager.snapshot_deleted.connect(
+                lambda name: self.load_snapshots()
             )
         except Exception:
             pass
@@ -425,6 +439,13 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.status_bar.showMessage(f"Error loading snapshots: {e}")
 
+    def select_snapshot_by_name(self, name: str):
+        for i in range(self.snapshot_list.count()):
+            it = self.snapshot_list.item(i)
+            if it and it.text() == name:
+                self.snapshot_list.setCurrentItem(it)
+                break
+
     def on_window_selected(self):
         """Handle window selection"""
         pass  # Could show window details here
@@ -585,6 +606,7 @@ class MainWindow(QMainWindow):
 
                 if success:
                     self.load_snapshots()
+                    self.select_snapshot_by_name(name)
                     self.status_bar.showMessage(f"Snapshot '{name}' saved successfully")
                 else:
                     QMessageBox.critical(self, "Error", "Failed to save snapshot.")

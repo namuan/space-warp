@@ -4,6 +4,7 @@ SpaceWarp - A revolutionary multi-display window and app layout manager for macO
 
 import sys
 from PyQt6.QtWidgets import QApplication
+from PyQt6.QtGui import QPalette
 
 from .main_window import MainWindow
 from .system_tray import SystemTrayIcon
@@ -21,6 +22,10 @@ def main():
     app.setApplicationName("SpaceWarp")
     app.setApplicationVersion("0.1.0")
     app.setOrganizationName("SpaceWarp")
+
+    # Apply Fusion style with light palette
+    app.setStyle("Fusion")
+    app.setPalette(app.style().standardPalette())
 
     # Initialize configuration
     config = Config()

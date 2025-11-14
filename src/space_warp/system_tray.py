@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import QSystemTrayIcon, QMenu, QApplication
 from PyQt6.QtGui import QIcon, QAction
 
 from .config import Config
+from .settings_dialog import SettingsDialog
 
 
 class SystemTrayIcon(QSystemTrayIcon):
@@ -169,7 +170,8 @@ class SystemTrayIcon(QSystemTrayIcon):
     def show_settings(self):
         """Show settings dialog"""
         self.show_main_window()
-        # This would open settings in the main window
+        dlg = SettingsDialog(self.config, self.main_window)
+        dlg.exec()
 
     def exit_application(self):
         """Exit the application"""
