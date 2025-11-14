@@ -74,6 +74,7 @@ app = BUNDLE(coll,
                'NSHighResolutionCapable': True,
                'LSMinimumSystemVersion': '10.14.0',
                'NSRequiresAquaSystemAppearance': False,
-               'NSAppleEventsUsageDescription': 'SpaceWarp automates window management.'
+               'NSAppleEventsUsageDescription': 'SpaceWarp automates window management.',
+               'LSUIElement': True,
                }
              )
