@@ -95,12 +95,12 @@ class SnapshotManager(QObject):
             existing = cursor.fetchone()
 
             if existing:
-                # Update existing snapshot
                 cursor.execute(
                     """
                     UPDATE snapshots
                     SET description = ?, windows_json = ?, displays_json = ?,
-                        metadata_json = ?, created_at = CURRENT_TIMESTAMP
+                        metadata_json = ?, created_at = CURRENT_TIMESTAMP,
+                        is_active = 1
                     WHERE name = ?
                 """,
                     (description, windows_json, displays_json, metadata_json, name),
@@ -297,6 +297,17 @@ class SnapshotManager(QObject):
         displays_data = json.loads(displays_json)
         metadata_data = json.loads(metadata_json) if metadata_json else {}
 
+        # Parse timestamp robustly
+        ts = created_at if isinstance(created_at, str) else str(created_at)
+        parsed_ts = None
+        try:
+            parsed_ts = datetime.fromisoformat(ts)
+        except Exception:
+            try:
+                parsed_ts = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+            except Exception:
+                parsed_ts = datetime.now()
+
         # Convert to objects
         windows = [WindowInfo(**w) for w in windows_data]
         displays = [DisplayInfo(**d) for d in displays_data]
@@ -305,7 +316,7 @@ class SnapshotManager(QObject):
             id=id,
             name=name,
             description=description,
-            created_at=datetime.fromisoformat(created_at),
+            created_at=parsed_ts,
             windows=windows,
             displays=displays,
             metadata=metadata_data,
