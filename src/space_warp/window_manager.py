@@ -4,6 +4,7 @@ Window management system for capturing and restoring app layouts
 
 import time
 from typing import Any
+import subprocess
 from dataclasses import dataclass
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QApplication
@@ -313,6 +314,7 @@ class WindowManager(QObject):
                 window_info.y,
                 window_info.width,
                 window_info.height,
+                window_info.window_title or None,
             )
 
             # Restore minimized state if needed
@@ -334,7 +336,7 @@ class WindowManager(QObject):
                 app.activateWithOptions_(0)  # NSApplicationActivateIgnoringOtherApps
                 break
 
-    def _move_window(self, pid: int, x: int, y: int, width: int, height: int) -> None:
+    def _move_window(self, pid: int, x: int, y: int, width: int, height: int, title: str | None = None) -> None:
         """Move and resize a window"""
         # This is a simplified implementation
         # In a real implementation, you would need to find the specific window
@@ -342,22 +344,18 @@ class WindowManager(QObject):
 
         # For now, we'll use a basic approach
         try:
-            # Create AppleScript to move the window
-            script = f"""
-            tell application "System Events"
-                tell (first application process whose unix id is {pid})
-                    try
-                        set position of window 1 to {{{x}, {y}}}
-                        set size of window 1 to {{{width}, {height}}}
-                    end try
-                end tell
-            end tell
-            """
-
-            # Execute AppleScript (this would need proper implementation)
-            # os.system(f"osascript -e '{script}'")
-            print(f"(this would need proper implementation) Executing script {script}")
-
+            target = (
+                f"set position of (first window whose name is \"{title}\") to {{{x}, {y}}}\n"
+                f"set size of (first window whose name is \"{title}\") to {{{width}, {height}}}"
+                if title
+                else f"set position of window 1 to {{{x}, {y}}}\nset size of window 1 to {{{width}, {height}}}"
+            )
+            script = (
+                "tell application \"System Events\"\n"
+                f"tell (first application process whose unix id is {pid})\n"
+                f"try\n{target}\nend try\nend tell\nend tell"
+            )
+            subprocess.run(["osascript", "-e", script], check=False)
         except Exception as e:
             print(f"Error moving window: {e}")
 
@@ -388,6 +386,24 @@ class WindowManager(QObject):
             print(f"Error launching app {bundle_id}: {e}")
             return False
 
+    def launch_app_by_name(self, app_name: str) -> bool:
+        try:
+            ok = False
+            try:
+                ok = bool(self.workspace.launchApplication_(app_name))
+            except Exception:
+                ok = False
+            if not ok:
+                try:
+                    subprocess.run(["open", "-a", app_name], check=False)
+                    ok = True
+                except Exception:
+                    ok = False
+            return ok
+        except Exception as e:
+            print(f"Error launching app {app_name}: {e}")
+            return False
+
     def quit_app(self, bundle_id: str) -> bool:
         """Quit an application by bundle ID"""
         try:
@@ -399,4 +415,67 @@ class WindowManager(QObject):
             return False
         except Exception as e:
             print(f"Error quitting app {bundle_id}: {e}")
+            return False
+
+    def restore_layout(self, snapshot) -> bool:
+        try:
+            current = self.get_windows()
+            ok = True
+            for w in snapshot.windows:
+                candidates = [cw for cw in current if cw.app_name == w.app_name]
+                chosen = None
+                if candidates:
+                    exact = [cw for cw in candidates if cw.window_title == w.window_title]
+                    chosen = exact[0] if exact else candidates[0]
+                    self._activate_app(chosen.pid)
+                    time.sleep(0.1)
+                    need_move = (
+                        abs(chosen.x - w.x) > 2
+                        or abs(chosen.y - w.y) > 2
+                        or abs(chosen.width - w.width) > 2
+                        or abs(chosen.height - w.height) > 2
+                    )
+                    if need_move:
+                        self._move_window(
+                            chosen.pid,
+                            w.x,
+                            w.y,
+                            w.width,
+                            w.height,
+                            w.window_title or None,
+                        )
+                    if w.is_minimized:
+                        self._minimize_window(chosen.pid, False)
+                    self.window_restored.emit(w.app_name, w.window_title)
+                else:
+                    launched = self.launch_app_by_name(w.app_name)
+                    if not launched:
+                        ok = False
+                        continue
+                    chosen = None
+                    for _ in range(100):
+                        time.sleep(0.1)
+                        current = self.get_windows(w.app_name)
+                        if current:
+                            chosen = current[0]
+                            break
+                    if not chosen:
+                        ok = False
+                        continue
+                    self._activate_app(chosen.pid)
+                    time.sleep(0.1)
+                    self._move_window(
+                        chosen.pid,
+                        w.x,
+                        w.y,
+                        w.width,
+                        w.height,
+                        w.window_title or None,
+                    )
+                    if w.is_minimized:
+                        self._minimize_window(chosen.pid, False)
+                    self.window_restored.emit(w.app_name, w.window_title)
+            return ok
+        except Exception as e:
+            print(f"Error restoring layout: {e}")
             return False

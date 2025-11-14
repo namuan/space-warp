@@ -194,19 +194,19 @@ class SnapshotManager(QObject):
             return False
 
     def restore_snapshot(self, name: str, window_manager) -> bool:
-        """Restore a snapshot"""
         snapshot = self.get_snapshot(name)
         if not snapshot:
             return False
-
         try:
-            # Restore each window
-            for window_info in snapshot.windows:
-                window_manager.restore_window(window_info)
-
-            self.snapshot_restored.emit(name)
-            return True
-
+            ok = False
+            if hasattr(window_manager, "restore_layout"):
+                ok = window_manager.restore_layout(snapshot)
+            else:
+                ok = all(window_manager.restore_window(w) for w in snapshot.windows)
+            if ok:
+                self.snapshot_restored.emit(name)
+                return True
+            return False
         except Exception as e:
             print(f"Error restoring snapshot {name}: {e}")
             return False
