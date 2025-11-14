@@ -211,6 +211,59 @@ class SnapshotManager(QObject):
             print(f"Error restoring snapshot {name}: {e}")
             return False
 
+    @dataclass
+    class RestoreReport:
+        snapshot_name: str
+        started_at: datetime
+        finished_at: datetime
+        total: int
+        restored_count: int
+        failed_count: int
+        items: list[dict[str, Any]]
+
+    def restore_snapshot_with_report(self, name: str, window_manager) -> RestoreReport | None:
+        snapshot = self.get_snapshot(name)
+        if not snapshot:
+            return None
+        started = datetime.now()
+        try:
+            if hasattr(window_manager, "restore_layout_with_report"):
+                ok, items = window_manager.restore_layout_with_report(snapshot)
+            else:
+                # Fallback: derive items from per-window calls
+                items: list[dict[str, Any]] = []
+                ok = True
+                for w in snapshot.windows:
+                    restored = bool(window_manager.restore_window(w))
+                    ok = ok and restored
+                    items.append(
+                        {
+                            "app_name": w.app_name,
+                            "window_title": w.window_title,
+                            "restored": restored,
+                            "launched": False,
+                            "reason": None if restored else "restore_failed",
+                        }
+                    )
+            finished = datetime.now()
+            restored_count = sum(1 for it in items if it.get("restored"))
+            failed_count = len(items) - restored_count
+            report = SnapshotManager.RestoreReport(
+                snapshot_name=name,
+                started_at=started,
+                finished_at=finished,
+                total=len(items),
+                restored_count=restored_count,
+                failed_count=failed_count,
+                items=items,
+            )
+            if ok:
+                self.snapshot_restored.emit(name)
+            return report
+        except Exception as e:
+            print(f"Error restoring snapshot {name}: {e}")
+            return None
+
     def auto_save_snapshot(
         self, name: str = "Auto Save", max_history: int = 10
     ) -> bool:

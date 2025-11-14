@@ -119,18 +119,22 @@ class MainWindow(QMainWindow):
         main_layout = QHBoxLayout(central_widget)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.splitter = splitter
         main_layout.addWidget(splitter)
 
         left_panel = self.create_current_windows_panel()
         splitter.addWidget(left_panel)
 
         debug_panel = self.create_debug_panel()
+        self.debug_panel = debug_panel
         splitter.addWidget(debug_panel)
 
         right_panel = self.create_snapshots_panel()
         splitter.addWidget(right_panel)
 
-        splitter.setSizes([400, 400, 400])
+        splitter.setSizes([600, 0, 600])
+        self.debug_panel.hide()
+        self.setup_logging_connections()
 
     def create_current_windows_panel(self):
         """Create the current windows panel"""
@@ -198,13 +202,24 @@ class MainWindow(QMainWindow):
         return group
 
     def create_debug_panel(self):
-        group = QGroupBox("Display & Window Coordinates")
+        group = QGroupBox("Debug")
         layout = QVBoxLayout(group)
 
+        info_group = QGroupBox("Display & Window Coordinates")
+        info_layout = QVBoxLayout(info_group)
         self.debug_info = QTextEdit()
         self.debug_info.setReadOnly(True)
         self.debug_info.setMinimumHeight(200)
-        layout.addWidget(self.debug_info)
+        info_layout.addWidget(self.debug_info)
+        layout.addWidget(info_group)
+
+        log_group = QGroupBox("Restore Log")
+        log_layout = QVBoxLayout(log_group)
+        self.debug_log = QTextEdit()
+        self.debug_log.setReadOnly(True)
+        self.debug_log.setMinimumHeight(160)
+        log_layout.addWidget(self.debug_log)
+        layout.addWidget(log_group)
 
         button_layout = QHBoxLayout()
         self.debug_refresh_btn = QPushButton("Refresh Debug Info")
@@ -213,6 +228,40 @@ class MainWindow(QMainWindow):
         layout.addLayout(button_layout)
 
         return group
+
+    def setup_logging_connections(self):
+        try:
+            self.window_manager.window_restore_started.connect(
+                lambda app, title: self.append_debug_log(f"START {app} | {title}")
+            )
+            self.window_manager.window_restored.connect(
+                lambda app, title: self.append_debug_log(f"OK    {app} | {title}")
+            )
+            self.window_manager.window_restore_failed.connect(
+                lambda app, title, reason: self.append_debug_log(
+                    f"FAIL  {app} | {title} reason={reason}"
+                )
+            )
+            self.window_manager.window_launch_attempt.connect(
+                lambda app, cmd: self.append_debug_log(f"LAUNCH TRY {app} cmd={cmd}")
+            )
+            self.window_manager.window_launch_result.connect(
+                lambda app, ok, detail: self.append_debug_log(
+                    f"LAUNCH {'OK' if ok else 'FAIL'} {app} detail={detail}"
+                )
+            )
+            self.snapshot_manager.snapshot_restored.connect(
+                lambda name: self.append_debug_log(f"SNAPSHOT OK {name}")
+            )
+        except Exception:
+            pass
+
+    def append_debug_log(self, line: str):
+        try:
+            ts = datetime.now().strftime("%H:%M:%S")
+            self.debug_log.append(f"[{ts}] {line}")
+        except Exception:
+            pass
 
     def setup_menu_bar(self):
         """Setup the menu bar"""
@@ -241,12 +290,30 @@ class MainWindow(QMainWindow):
         refresh_action.triggered.connect(self.update_window_list)
         view_menu.addAction(refresh_action)
 
+        toggle_debug_action = QAction("Debug Panel", self)
+        toggle_debug_action.setCheckable(True)
+        toggle_debug_action.setChecked(False)
+        toggle_debug_action.toggled.connect(self.set_debug_visible)
+        view_menu.addAction(toggle_debug_action)
+        self.view_debug_action = toggle_debug_action
+
         # Tools menu
         tools_menu = menubar.addMenu("Tools")
 
         capture_action = QAction("Capture Current Layout", self)
         capture_action.triggered.connect(self.capture_all_windows)
         tools_menu.addAction(capture_action)
+
+    def set_debug_visible(self, visible: bool):
+        try:
+            if visible:
+                self.debug_panel.show()
+                self.splitter.setSizes([450, 300, 450])
+            else:
+                self.debug_panel.hide()
+                self.splitter.setSizes([800, 0, 800])
+        except Exception:
+            pass
 
         # Help menu
         help_menu = menubar.addMenu("Help")
@@ -538,19 +605,37 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            success = self.snapshot_manager.restore_snapshot(
+            report = self.snapshot_manager.restore_snapshot_with_report(
                 snapshot.name, self.window_manager
             )
 
-            if success:
-                self.status_bar.showMessage(
-                    f"Snapshot '{snapshot.name}' restored successfully"
-                )
-                self.update_window_list()  # Refresh the window list
-            else:
+            if report is None:
                 self.status_bar.showMessage(
                     f"Failed to restore snapshot '{snapshot.name}'"
                 )
+                return
+
+            if report.failed_count == 0:
+                self.status_bar.showMessage(
+                    f"Restored {report.restored_count}/{report.total} for '{snapshot.name}'"
+                )
+            else:
+                failed = [f"{it['app_name']}" for it in report.items if not it.get("restored")]
+                msg = f"Restored {report.restored_count}/{report.total}. Failed: {', '.join(sorted(set(failed)))}"
+                self.status_bar.showMessage(msg)
+                QMessageBox.warning(self, "Restore Completed With Failures", msg)
+
+            self.update_window_list()  # Refresh the window list
+
+            try:
+                self.append_debug_log(
+                    f"SNAPSHOT '{snapshot.name}' restored {report.restored_count}/{report.total}"
+                )
+                if report.failed_count:
+                    failed_apps = ", ".join(sorted(set([it["app_name"] for it in report.items if not it.get("restored")])))
+                    self.append_debug_log(f"SNAPSHOT failures: {failed_apps}")
+            except Exception:
+                pass
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error restoring snapshot: {e}")

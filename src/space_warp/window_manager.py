@@ -27,6 +27,7 @@ class WindowInfo:
     is_hidden: bool
     display_id: int
     pid: int
+    bundle_id: str | None = None
 
 
 @dataclass
@@ -47,6 +48,10 @@ class WindowManager(QObject):
 
     window_captured = pyqtSignal(WindowInfo)
     window_restored = pyqtSignal(str, str)  # app_name, window_title
+    window_restore_started = pyqtSignal(str, str)
+    window_restore_failed = pyqtSignal(str, str, str)
+    window_launch_attempt = pyqtSignal(str, str)
+    window_launch_result = pyqtSignal(str, bool, str)
 
     def __init__(self):
         super().__init__()
@@ -175,6 +180,8 @@ class WindowManager(QObject):
             return windows
 
         try:
+            apps = self.get_running_apps()
+            bundle_by_pid = {a["pid"]: a.get("bundle_id") for a in apps}
             # Get window list from Quartz Window Services
             window_list = Quartz.CGWindowListCopyWindowInfo(
                 Quartz.kCGWindowListOptionOnScreenOnly
@@ -221,6 +228,7 @@ class WindowManager(QObject):
 
                         # Check if window is minimized (this is approximate)
                         is_minimized = self._is_window_minimized(pid, window_name)
+                        bundle_id = bundle_by_pid.get(pid)
 
                         window_info = WindowInfo(
                             app_name=owner_name,
@@ -233,6 +241,7 @@ class WindowManager(QObject):
                             is_hidden=False,  # Will be determined by app state
                             display_id=display_id,
                             pid=pid,
+                            bundle_id=bundle_id,
                         )
 
                         windows.append(window_info)
@@ -301,6 +310,7 @@ class WindowManager(QObject):
     def restore_window(self, window_info: WindowInfo) -> bool:
         """Restore a window to its captured state"""
         try:
+            self.window_restore_started.emit(window_info.app_name, window_info.window_title)
             # First, try to bring the app to front
             self._activate_app(window_info.pid)
 
@@ -326,6 +336,11 @@ class WindowManager(QObject):
 
         except Exception as e:
             print(f"Error restoring window {window_info.app_name}: {e}")
+            try:
+                reason = str(e) if str(e) else "restore_error"
+                self.window_restore_failed.emit(window_info.app_name, window_info.window_title, reason)
+            except Exception:
+                pass
             return False
 
     def _activate_app(self, pid: int) -> None:
@@ -386,23 +401,57 @@ class WindowManager(QObject):
             print(f"Error launching app {bundle_id}: {e}")
             return False
 
-    def launch_app_by_name(self, app_name: str) -> bool:
+    def launch_app_by_name(self, app_name: str) -> tuple[bool, str]:
         try:
-            ok = False
+            self.window_launch_attempt.emit(app_name, f"NSWorkspace.launchApplication_('{app_name}')")
             try:
                 ok = bool(self.workspace.launchApplication_(app_name))
             except Exception:
                 ok = False
-            if not ok:
-                try:
-                    subprocess.run(["open", "-a", app_name], check=False)
-                    ok = True
-                except Exception:
-                    ok = False
-            return ok
+            if ok:
+                self.window_launch_result.emit(app_name, True, "nsworkspace")
+                return True, f"NSWorkspace.launchApplication_('{app_name}')"
+            self.window_launch_attempt.emit(app_name, f"open -a {app_name}")
+            try:
+                subprocess.run(["open", "-a", app_name], check=False)
+                self.window_launch_result.emit(app_name, True, "open -a")
+                return True, f"open -a {app_name}"
+            except Exception:
+                pass
+            self.window_launch_result.emit(app_name, False, "launch_failed")
+            return False, "launch_failed"
         except Exception as e:
             print(f"Error launching app {app_name}: {e}")
-            return False
+            try:
+                self.window_launch_result.emit(app_name, False, str(e) if str(e) else "error")
+            except Exception:
+                pass
+            return False, "error"
+
+    def launch_app_prefer_info(self, app_name: str, bundle_id: str | None) -> tuple[bool, str]:
+        try:
+            if bundle_id:
+                self.window_launch_attempt.emit(app_name, f"bundle '{bundle_id}' via NSWorkspace")
+                ok = self.launch_app(bundle_id)
+                if ok:
+                    self.window_launch_result.emit(app_name, True, "bundle_id")
+                    return True, f"bundle '{bundle_id}' via NSWorkspace"
+                self.window_launch_attempt.emit(app_name, f"open -b {bundle_id}")
+                try:
+                    subprocess.run(["open", "-b", bundle_id], check=False)
+                    self.window_launch_result.emit(app_name, True, "open -b")
+                    return True, f"open -b {bundle_id}"
+                except Exception:
+                    pass
+            # Fallback to name-based
+            return self.launch_app_by_name(app_name)
+        except Exception as e:
+            print(f"Error launching app {app_name} (prefer bundle): {e}")
+            try:
+                self.window_launch_result.emit(app_name, False, str(e) if str(e) else "error")
+            except Exception:
+                pass
+            return False, "error"
 
     def quit_app(self, bundle_id: str) -> bool:
         """Quit an application by bundle ID"""
@@ -422,6 +471,7 @@ class WindowManager(QObject):
             current = self.get_windows()
             ok = True
             for w in snapshot.windows:
+                self.window_restore_started.emit(w.app_name, w.window_title)
                 candidates = [cw for cw in current if cw.app_name == w.app_name]
                 chosen = None
                 if candidates:
@@ -448,19 +498,28 @@ class WindowManager(QObject):
                         self._minimize_window(chosen.pid, False)
                     self.window_restored.emit(w.app_name, w.window_title)
                 else:
-                    launched = self.launch_app_by_name(w.app_name)
+                    launched, launch_cmd = self.launch_app_prefer_info(w.app_name, w.bundle_id)
                     if not launched:
                         ok = False
+                        try:
+                            self.window_restore_failed.emit(w.app_name, w.window_title, "launch_failed")
+                        except Exception:
+                            pass
                         continue
                     chosen = None
-                    for _ in range(100):
-                        time.sleep(0.1)
+                    # Wait for window to appear (progressive backoff up to ~30s)
+                    for i in range(200):
+                        time.sleep(0.15 if i < 100 else 0.3)
                         current = self.get_windows(w.app_name)
                         if current:
                             chosen = current[0]
                             break
                     if not chosen:
                         ok = False
+                        try:
+                            self.window_restore_failed.emit(w.app_name, w.window_title, "window_timeout")
+                        except Exception:
+                            pass
                         continue
                     self._activate_app(chosen.pid)
                     time.sleep(0.1)
@@ -479,3 +538,93 @@ class WindowManager(QObject):
         except Exception as e:
             print(f"Error restoring layout: {e}")
             return False
+
+    def restore_layout_with_report(self, snapshot) -> tuple[bool, list[dict[str, Any]]]:
+        try:
+            current = self.get_windows()
+            ok = True
+            items: list[dict[str, Any]] = []
+            for w in snapshot.windows:
+                self.window_restore_started.emit(w.app_name, w.window_title)
+                entry = {
+                    "app_name": w.app_name,
+                    "window_title": w.window_title,
+                    "restored": False,
+                    "launched": False,
+                    "reason": None,
+                }
+                candidates = [cw for cw in current if cw.app_name == w.app_name]
+                chosen = None
+                if candidates:
+                    exact = [cw for cw in candidates if cw.window_title == w.window_title]
+                    chosen = exact[0] if exact else candidates[0]
+                    self._activate_app(chosen.pid)
+                    time.sleep(0.1)
+                    need_move = (
+                        abs(chosen.x - w.x) > 2
+                        or abs(chosen.y - w.y) > 2
+                        or abs(chosen.width - w.width) > 2
+                        or abs(chosen.height - w.height) > 2
+                    )
+                    if need_move:
+                        self._move_window(
+                            chosen.pid,
+                            w.x,
+                            w.y,
+                            w.width,
+                            w.height,
+                            w.window_title or None,
+                        )
+                    if w.is_minimized:
+                        self._minimize_window(chosen.pid, False)
+                    self.window_restored.emit(w.app_name, w.window_title)
+                    entry["restored"] = True
+                else:
+                    launched, launch_cmd = self.launch_app_prefer_info(w.app_name, w.bundle_id)
+                    entry["launched"] = bool(launched)
+                    entry["launch_command"] = launch_cmd
+                    if not launched:
+                        ok = False
+                        entry["reason"] = "launch_failed"
+                        try:
+                            self.window_restore_failed.emit(w.app_name, w.window_title, "launch_failed")
+                        except Exception:
+                            pass
+                        items.append(entry)
+                        continue
+                    chosen = None
+                    # Wait for window to appear (progressive backoff up to ~30s)
+                    for i in range(200):
+                        time.sleep(0.15 if i < 100 else 0.3)
+                        current = self.get_windows(w.app_name)
+                        if current:
+                            chosen = current[0]
+                            break
+                    if not chosen:
+                        ok = False
+                        entry["reason"] = "window_timeout"
+                        try:
+                            self.window_restore_failed.emit(w.app_name, w.window_title, "window_timeout")
+                        except Exception:
+                            pass
+                        items.append(entry)
+                        continue
+                    self._activate_app(chosen.pid)
+                    time.sleep(0.1)
+                    self._move_window(
+                        chosen.pid,
+                        w.x,
+                        w.y,
+                        w.width,
+                        w.height,
+                        w.window_title or None,
+                    )
+                    if w.is_minimized:
+                        self._minimize_window(chosen.pid, False)
+                    self.window_restored.emit(w.app_name, w.window_title)
+                    entry["restored"] = True
+                items.append(entry)
+            return ok, items
+        except Exception as e:
+            print(f"Error restoring layout: {e}")
+            return False, []

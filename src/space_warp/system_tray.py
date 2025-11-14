@@ -133,22 +133,29 @@ class SystemTrayIcon(QSystemTrayIcon):
 
             snapshot_manager = SnapshotManager(self.config)
             window_manager = WindowManager()
-
-            success = snapshot_manager.restore_snapshot(name, window_manager)
-
-            if success:
-                self.showMessage(
-                    "Snapshot Restored",
-                    f"Successfully restored snapshot '{name}'",
-                    QSystemTrayIcon.MessageIcon.Information,
-                    3000,
-                )
-            else:
+            report = snapshot_manager.restore_snapshot_with_report(name, window_manager)
+            if report is None:
                 self.showMessage(
                     "Restore Failed",
                     f"Failed to restore snapshot '{name}'",
                     QSystemTrayIcon.MessageIcon.Critical,
                     3000,
+                )
+                return
+            if report.failed_count == 0:
+                self.showMessage(
+                    "Snapshot Restored",
+                    f"Restored {report.restored_count}/{report.total} for '{name}'",
+                    QSystemTrayIcon.MessageIcon.Information,
+                    3000,
+                )
+            else:
+                failed_apps = ", ".join(sorted({f["app_name"] for f in report.items if not f.get("restored")}))
+                self.showMessage(
+                    "Restore Completed With Failures",
+                    f"Restored {report.restored_count}/{report.total}; failed: {failed_apps}",
+                    QSystemTrayIcon.MessageIcon.Warning,
+                    5000,
                 )
 
         except Exception as e:
