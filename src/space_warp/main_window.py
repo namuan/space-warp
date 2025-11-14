@@ -117,20 +117,19 @@ class MainWindow(QMainWindow):
         # Main layout
         main_layout = QHBoxLayout(central_widget)
 
-        # Create splitter for resizable panels
         splitter = QSplitter(Qt.Orientation.Horizontal)
         main_layout.addWidget(splitter)
 
-        # Left panel - Current Windows
         left_panel = self.create_current_windows_panel()
         splitter.addWidget(left_panel)
 
-        # Right panel - Snapshots
+        debug_panel = self.create_debug_panel()
+        splitter.addWidget(debug_panel)
+
         right_panel = self.create_snapshots_panel()
         splitter.addWidget(right_panel)
 
-        # Set splitter proportions
-        splitter.setSizes([600, 600])
+        splitter.setSizes([400, 400, 400])
 
     def create_current_windows_panel(self):
         """Create the current windows panel"""
@@ -189,6 +188,23 @@ class MainWindow(QMainWindow):
         self.delete_snapshot_btn.clicked.connect(self.delete_selected_snapshot)
         button_layout.addWidget(self.delete_snapshot_btn)
 
+        layout.addLayout(button_layout)
+
+        return group
+
+    def create_debug_panel(self):
+        group = QGroupBox("Display & Window Coordinates")
+        layout = QVBoxLayout(group)
+
+        self.debug_info = QTextEdit()
+        self.debug_info.setReadOnly(True)
+        self.debug_info.setMinimumHeight(200)
+        layout.addWidget(self.debug_info)
+
+        button_layout = QHBoxLayout()
+        self.debug_refresh_btn = QPushButton("Refresh Debug Info")
+        self.debug_refresh_btn.clicked.connect(self.update_window_list)
+        button_layout.addWidget(self.debug_refresh_btn)
         layout.addLayout(button_layout)
 
         return group
@@ -300,6 +316,24 @@ class MainWindow(QMainWindow):
                 self.status_bar.showMessage(
                     f"Found {len(windows)} windows on {len(displays)} displays"
                 )
+
+            try:
+                lines = []
+                lines.append(f"Displays ({len(displays)}):")
+                for d in displays:
+                    lines.append(
+                        f"- {d.name} id={d.display_id} main={d.is_main} x={d.x} y={d.y} w={d.width} h={d.height}"
+                    )
+                lines.append("")
+                lines.append(f"Windows ({len(windows)}):")
+                for w in windows:
+                    lines.append(
+                        f"- {w.app_name} | {w.window_title} pid={w.pid} x={w.x} y={w.y} w={w.width} h={w.height} display_id={w.display_id}"
+                    )
+                if hasattr(self, "debug_info"):
+                    self.debug_info.setPlainText("\n".join(lines))
+            except Exception as _:
+                pass
 
         except Exception as e:
             self.status_bar.showMessage(f"Error updating window list: {e}")

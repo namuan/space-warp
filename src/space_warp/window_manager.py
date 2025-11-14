@@ -6,6 +6,7 @@ import time
 from typing import Any
 from dataclasses import dataclass
 from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtWidgets import QApplication
 
 import Quartz
 from AppKit import NSWorkspace
@@ -96,42 +97,54 @@ class WindowManager(QObject):
         ]
 
     def get_displays(self) -> list[DisplayInfo]:
-        """Get information about all connected displays"""
-        displays = []
+        app = QApplication.instance()
+        if app:
+            screens = app.screens()
+            if screens:
+                displays: list[DisplayInfo] = []
+                primary = app.primaryScreen()
+                for idx, screen in enumerate(screens):
+                    geo = screen.geometry()
+                    displays.append(
+                        DisplayInfo(
+                            display_id=idx + 1,
+                            name=screen.name() or f"Display {idx+1}",
+                            width=geo.width(),
+                            height=geo.height(),
+                            x=geo.x(),
+                            y=geo.y(),
+                            is_main=(screen == primary),
+                        )
+                    )
+                return displays
+
         try:
             max_displays = 32
-            display_count = Quartz.CGDisplayCount()
+            count = Quartz.CGDisplayCount
             online_displays = (Quartz.CGDirectDisplayID * max_displays)()
-
-            result = Quartz.CGGetOnlineDisplayList(
-                max_displays, online_displays, display_count
-            )
-            if result != 0:  # kCGErrorSuccess
-                print(f"Warning: CGGetOnlineDisplayList returned error: {result}")
-                # Return main display as fallback
+            result = Quartz.CGGetOnlineDisplayList(max_displays, online_displays, count)
+            if result != 0:
                 return self._get_main_display_fallback()
-
-            for i in range(display_count.value):
-                display_id = online_displays[i]
-                bounds = Quartz.CGDisplayBounds(display_id)
-
-                display_info = DisplayInfo(
-                    display_id=display_id,
-                    name=f"Display {display_id}",
-                    width=int(bounds.size.width),
-                    height=int(bounds.size.height),
-                    x=int(bounds.origin.x),
-                    y=int(bounds.origin.y),
-                    is_main=(display_id == Quartz.CGMainDisplayID()),
+            displays: list[DisplayInfo] = []
+            for i in range(max_displays):
+                did = online_displays[i]
+                if not did:
+                    break
+                bounds = Quartz.CGDisplayBounds(did)
+                displays.append(
+                    DisplayInfo(
+                        display_id=did,
+                        name=f"Display {did}",
+                        width=int(bounds.size.width),
+                        height=int(bounds.size.height),
+                        x=int(bounds.origin.x),
+                        y=int(bounds.origin.y),
+                        is_main=(did == Quartz.CGMainDisplayID()),
+                    )
                 )
-                displays.append(display_info)
-
-        except Exception as e:
-            print(f"Error getting displays: {e}")
-            # Return main display as fallback
+            return displays if displays else self._get_main_display_fallback()
+        except Exception:
             return self._get_main_display_fallback()
-
-        return displays if displays else self._get_main_display_fallback()
 
     def get_running_apps(self) -> list[dict[str, Any]]:
         """Get list of running applications"""
@@ -203,8 +216,7 @@ class WindowManager(QObject):
                         if width <= 0 or height <= 0:
                             continue
 
-                        # Determine which display this window is on
-                        display_id = self._get_display_for_window(x, y)
+                        display_id = self._get_display_for_window(x, y, width, height)
 
                         # Check if window is minimized (this is approximate)
                         is_minimized = self._is_window_minimized(pid, window_name)
@@ -235,18 +247,44 @@ class WindowManager(QObject):
 
         return windows
 
-    def _get_display_for_window(self, x: int, y: int) -> int:
-        """Determine which display contains the window"""
+    def _get_display_for_window(self, x: int, y: int, width: int, height: int) -> int:
         displays = self.get_displays()
 
+        win_min_x = x
+        win_max_x = x + width
+        win_min_y = y
+        win_max_y = y + height
+
+        best_display_id = None
+        best_area = -1
+
+        for display in displays:
+            disp_min_x = display.x
+            disp_max_x = display.x + display.width
+            disp_min_y = display.y
+            disp_max_y = display.y + display.height
+
+            inter_w = min(win_max_x, disp_max_x) - max(win_min_x, disp_min_x)
+            inter_h = min(win_max_y, disp_max_y) - max(win_min_y, disp_min_y)
+
+            if inter_w > 0 and inter_h > 0:
+                area = inter_w * inter_h
+                if area > best_area:
+                    best_area = area
+                    best_display_id = display.display_id
+
+        if best_display_id is not None:
+            return best_display_id
+
+        cx = x + (width // 2)
+        cy = y + (height // 2)
         for display in displays:
             if (
-                display.x <= x < display.x + display.width
-                and display.y <= y < display.y + display.height
+                display.x <= cx < display.x + display.width
+                and display.y <= cy < display.y + display.height
             ):
                 return display.display_id
 
-        # Default to main display if not found
         return Quartz.CGMainDisplayID()
 
     def _is_window_minimized(self, pid: int, window_title: str) -> bool:
