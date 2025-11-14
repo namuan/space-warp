@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import (
     QStatusBar,
     QDialog,
     QDialogButtonBox,
+    QDockWidget,
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction, QKeySequence
@@ -125,16 +126,14 @@ class MainWindow(QMainWindow):
         left_panel = self.create_current_windows_panel()
         splitter.addWidget(left_panel)
 
-        debug_panel = self.create_debug_panel()
-        self.debug_panel = debug_panel
-        splitter.addWidget(debug_panel)
+        # debug panel moved to dock
 
         right_panel = self.create_snapshots_panel()
         splitter.addWidget(right_panel)
 
-        splitter.setSizes([600, 0, 600])
-        self.debug_panel.hide()
+        splitter.setSizes([600, 600])
         self.setup_logging_connections()
+        self.create_debug_dock()
 
     def create_current_windows_panel(self):
         """Create the current windows panel"""
@@ -289,13 +288,8 @@ class MainWindow(QMainWindow):
         refresh_action.setShortcut(QKeySequence.StandardKey.Refresh)
         refresh_action.triggered.connect(self.update_window_list)
         view_menu.addAction(refresh_action)
-
-        toggle_debug_action = QAction("Debug Panel", self)
-        toggle_debug_action.setCheckable(True)
-        toggle_debug_action.setChecked(False)
-        toggle_debug_action.toggled.connect(self.set_debug_visible)
-        view_menu.addAction(toggle_debug_action)
-        self.view_debug_action = toggle_debug_action
+        if hasattr(self, "debug_dock"):
+            view_menu.addAction(self.debug_dock.toggleViewAction())
 
         # Tools menu
         tools_menu = menubar.addMenu("Tools")
@@ -304,29 +298,34 @@ class MainWindow(QMainWindow):
         capture_action.triggered.connect(self.capture_all_windows)
         tools_menu.addAction(capture_action)
 
-    def set_debug_visible(self, visible: bool):
-        try:
-            if visible:
-                self.debug_panel.show()
-                self.splitter.setSizes([450, 300, 450])
-            else:
-                self.debug_panel.hide()
-                self.splitter.setSizes([800, 0, 800])
-        except Exception:
-            pass
-
-        # Help menu
-        help_menu = menubar.addMenu("Help")
-
-        permissions_action = QAction("Check Permissions...", self)
-        permissions_action.triggered.connect(self.show_permissions_instructions)
-        help_menu.addAction(permissions_action)
-
-        help_menu.addSeparator()
-
-        about_action = QAction("About", self)
-        about_action.triggered.connect(self.show_about)
-        help_menu.addAction(about_action)
+    def create_debug_dock(self):
+        dock = QDockWidget("Debug", self)
+        dock.setObjectName("DebugDock")
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        info_group = QGroupBox("Display & Window Coordinates")
+        info_layout = QVBoxLayout(info_group)
+        self.debug_info = QTextEdit()
+        self.debug_info.setReadOnly(True)
+        self.debug_info.setMinimumHeight(200)
+        info_layout.addWidget(self.debug_info)
+        layout.addWidget(info_group)
+        log_group = QGroupBox("Restore Log")
+        log_layout = QVBoxLayout(log_group)
+        self.debug_log = QTextEdit()
+        self.debug_log.setReadOnly(True)
+        self.debug_log.setMinimumHeight(160)
+        log_layout.addWidget(self.debug_log)
+        layout.addWidget(log_group)
+        button_layout = QHBoxLayout()
+        self.debug_refresh_btn = QPushButton("Refresh Debug Info")
+        self.debug_refresh_btn.clicked.connect(self.update_window_list)
+        button_layout.addWidget(self.debug_refresh_btn)
+        layout.addLayout(button_layout)
+        dock.setWidget(container)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
+        dock.hide()
+        self.debug_dock = dock
 
     def setup_status_bar(self):
         """Setup the status bar"""
