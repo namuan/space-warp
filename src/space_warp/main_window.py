@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction, QKeySequence
 from datetime import datetime
+import json
 
 from .window_manager import WindowManager
 from .snapshot_manager import SnapshotManager
@@ -169,7 +170,7 @@ class MainWindow(QMainWindow):
 
         # Snapshot info
         self.snapshot_info = QTextEdit()
-        self.snapshot_info.setMaximumHeight(100)
+        self.snapshot_info.setMaximumHeight(220)
         self.snapshot_info.setReadOnly(True)
         layout.addWidget(self.snapshot_info)
 
@@ -187,6 +188,10 @@ class MainWindow(QMainWindow):
         self.delete_snapshot_btn = QPushButton("Delete")
         self.delete_snapshot_btn.clicked.connect(self.delete_selected_snapshot)
         button_layout.addWidget(self.delete_snapshot_btn)
+
+        self.view_json_btn = QPushButton("View Raw JSON")
+        self.view_json_btn.clicked.connect(self.view_raw_json)
+        button_layout.addWidget(self.view_json_btn)
 
         layout.addLayout(button_layout)
 
@@ -364,11 +369,107 @@ class MainWindow(QMainWindow):
         if current_item:
             snapshot = current_item.data(Qt.ItemDataRole.UserRole)
             if snapshot:
-                info = f"Created: {snapshot.created_at.strftime('%Y-%m-%d %H:%M:%S')}\n"
-                info += f"Windows: {len(snapshot.windows)}\n"
-                info += f"Displays: {len(snapshot.displays)}\n"
-                info += f"Description: {snapshot.description}"
-                self.snapshot_info.setPlainText(info)
+                lines = []
+                lines.append(f"Name: {snapshot.name}")
+                lines.append(
+                    f"Created: {snapshot.created_at.strftime('%Y-%m-%d %H:%M:%S')}"
+                )
+                lines.append(f"Description: {snapshot.description}")
+                lines.append("")
+
+                lines.append(f"Displays ({len(snapshot.displays)}):")
+                for d in snapshot.displays:
+                    lines.append(
+                        f"- {d.name} id={d.display_id} main={d.is_main} x={d.x} y={d.y} w={d.width} h={d.height}"
+                    )
+
+                display_name_map = {d.display_id: d.name for d in snapshot.displays}
+                lines.append("")
+                lines.append(f"Windows ({len(snapshot.windows)}):")
+                for w in snapshot.windows:
+                    disp_name = display_name_map.get(w.display_id, "?")
+                    status = ""
+                    if w.is_minimized:
+                        status = " [Minimized]"
+                    elif w.is_hidden:
+                        status = " [Hidden]"
+                    lines.append(
+                        f"- {w.app_name} | {w.window_title}{status} pid={w.pid} x={w.x} y={w.y} w={w.width} h={w.height} display_id={w.display_id} display={disp_name}"
+                    )
+
+                if snapshot.metadata:
+                    lines.append("")
+                    lines.append("Metadata:")
+                    for k, v in snapshot.metadata.items():
+                        lines.append(f"- {k}: {v}")
+
+                self.snapshot_info.setPlainText("\n".join(lines))
+
+    def view_raw_json(self):
+        current_item = self.snapshot_list.currentItem()
+        if not current_item:
+            QMessageBox.warning(self, "Warning", "Please select a snapshot.")
+            return
+
+        snapshot = current_item.data(Qt.ItemDataRole.UserRole)
+        if not snapshot:
+            return
+
+        payload = {
+            "name": snapshot.name,
+            "description": snapshot.description,
+            "created_at": snapshot.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+            "windows": [
+                {
+                    "app_name": w.app_name,
+                    "window_title": w.window_title,
+                    "x": w.x,
+                    "y": w.y,
+                    "width": w.width,
+                    "height": w.height,
+                    "is_minimized": w.is_minimized,
+                    "is_hidden": w.is_hidden,
+                    "display_id": w.display_id,
+                    "pid": w.pid,
+                }
+                for w in snapshot.windows
+            ],
+            "displays": [
+                {
+                    "display_id": d.display_id,
+                    "name": d.name,
+                    "width": d.width,
+                    "height": d.height,
+                    "x": d.x,
+                    "y": d.y,
+                    "is_main": d.is_main,
+                }
+                for d in snapshot.displays
+            ],
+            "metadata": snapshot.metadata or {},
+        }
+
+        text = json.dumps(payload, indent=2)
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Snapshot JSON: {snapshot.name}")
+        dlg.resize(700, 500)
+
+        v = QVBoxLayout(dlg)
+        te = QTextEdit()
+        te.setReadOnly(True)
+        te.setPlainText(text)
+        v.addWidget(te)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok,
+            Qt.Orientation.Horizontal,
+            dlg,
+        )
+        buttons.accepted.connect(dlg.accept)
+        v.addWidget(buttons)
+
+        dlg.exec()
 
     def capture_all_windows(self):
         """Capture all current windows"""
