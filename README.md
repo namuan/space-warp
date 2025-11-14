@@ -1,117 +1,57 @@
 # SpaceWarp
 
-Save and restore your entire app configuration—positions, sizes, even across multiple screens—as a "snapshot," and restore it instantly.
+Save and restore your window layout, including position, size, and display assignment, as a quick snapshot.
+Optimized for multi-display setups on macOS.
+
+![](assets/app-intro.png)
 
 ## Features
 
-TBC
+- Capture the current layout of your application windows (across multiple displays)
+- Save layouts as named snapshots in a local SQLite database
+- Restore layouts later, attempting to reopen and reposition windows
+- Provide quick access via a system tray icon and a main window
 
-## Installation
+## Requirements
 
-### Requirements
-
-- macOS 10.14 or later
+- macOS (Accessibility and Screen Recording permissions required)
 - Python 3.11 or later
-- `uv` package manager
+- uv (https://github.com/astral-sh/uv) installed
 
-### Install Dependencies
+## Getting Started
 
-```bash
-# Install dependencies using uv
-uv sync
+Download this repo (either clone it or download the zip file)
 
-# Or install manually
-uv add PyQt6 pyobjc-framework-Cocoa pyobjc-framework-ApplicationServices pyyaml
-```
+Run the `install.command` script to install this application.
 
-### Important: Permissions Required
+After installation, you can run the application from the $USER/Applications folder.
 
-SpaceWarp requires macOS permissions to function:
+## Permissions (macOS)
 
-1. **Accessibility Permission** - For window management
-2. **Screen Recording Permission** - For display information
+SpaceWarp needs the following permissions to function correctly:
 
-The app will prompt you to grant these permissions on first launch. See [PERMISSIONS.md](PERMISSIONS.md) for detailed instructions.
+1. Accessibility (to enumerate, activate, and move windows)
+2. Screen Recording (to read display information on newer macOS versions)
+
+Grant them in: System Settings → Privacy & Security → Accessibility / Screen Recording. The app will prompt if not yet granted.
 
 ## Usage
 
-### Running the Application
+Basic flow:
+1. Arrange your windows the way you like across your displays.
+2. Save a snapshot from the main window or the tray menu.
+3. Later, restore the snapshot from the tray menu or main window. A restore report summarizes results.
 
-```bash
-# Run directly with Python
-uv run python -m space_warp
-
-# Or make it executable
-chmod +x run.sh
-./run.sh
-```
-
-### Basic Usage
-
-1. **Launch the Application**: The app starts in the system tray
-2. **Arrange Your Windows**: Set up your applications exactly how you want them
-3. **Save a Snapshot**: Click "Save Snapshot" or use `Ctrl+Shift+S`
-4. **Restore Later**: Select a snapshot from the list or system tray menu
-
-### Keyboard Shortcuts
-
-- `Ctrl+Shift+S`: Save current layout as snapshot
-- `Ctrl+Shift+R`: Restore last used snapshot
+Keyboard shortcuts (as configured by default in the config file):
+- `Ctrl+Shift+S`: Save snapshot
+- `Ctrl+Shift+R`: Restore last snapshot
 - `Ctrl+Shift+M`: Show window manager
 
-### System Tray Menu
-
-Right-click the system tray icon for quick access to:
-
-- Save current layout
-- Restore saved layouts
-- Show main window
-- Application settings
-
-## Development
-
-### Project Structure
-
-```
-space-warp/
-├── src/
-│   └── space_warp/
-│       ├── __init__.py          # Package initialization
-│       ├── __main__.py          # Entry point
-│       ├── main.py              # Main application
-│       ├── config.py            # Configuration management
-│       ├── window_manager.py    # Window capture/restore logic
-│       ├── snapshot_manager.py  # Snapshot save/restore logic
-│       ├── main_window.py       # Main GUI window
-│       └── system_tray.py       # System tray integration
-├── pyproject.toml               # Project configuration
-└── README.md                    # This file
-```
-
-### Key Components
-
-- **WindowManager**: Handles window capture and restoration using macOS APIs
-- **SnapshotManager**: Manages saving and loading window layouts to SQLite
-- **MainWindow**: PyQt6-based GUI for managing snapshots
-- **SystemTrayIcon**: System tray integration for quick access
-- **Config**: YAML-based configuration management
-
-### Building for Distribution
-
-```bash
-# Install build dependencies
-uv add --dev pyinstaller
-
-# Build the application
-pyinstaller --onefile --windowed \
-  --name "SpaceWarp" \
-  --icon "icon.icns" \
-  src/space_warp/__main__.py
-```
+System tray menu provides quick access to save/restore, settings, showing the main window, and exiting.
 
 ## Configuration
 
-Configuration is stored in `~/.spacewarp/config.yaml`:
+Configuration is stored at `~/.spacewarp/config.yaml`. Default schema:
 
 ```yaml
 start_minimized: true
@@ -128,36 +68,32 @@ snapshots:
   max_snapshots: 50
 ```
 
+Snapshot data is stored at `~/.spacewarp/snapshots.db` (SQLite), managed by the application.
+
 ## Troubleshooting
 
-### Application Won't Start
-
+Application won’t start:
 - Ensure Python 3.11+ is installed
-- Check that all dependencies are installed: `uv sync`
-- Verify macOS permissions for accessibility APIs
+- Ensure dependencies are installed: `uv sync`
+- Launch from a terminal the first time to observe any errors: `uv run space-warp`
 
-### Windows Not Capturing/Restoring
+Windows not capturing/restoring:
+- Verify Accessibility and Screen Recording permissions are granted
+- Some applications may not expose windows via accessibility APIs
+- Check the debug panel in the main window for logs
 
-- Grant accessibility permissions in System Preferences > Security & Privacy > Accessibility
-- Some applications may require additional permissions
-- Check the application logs for specific errors
+Multi‑display issues:
+- Confirm macOS detects all displays and arrangement is correct
+- Try creating a fresh snapshot after changing display configuration
 
-### Multi-Display Issues
-
-- Ensure displays are properly detected in System Preferences
-- Check display arrangement settings
-- Verify snapshot was created with the same display configuration
-
-### Permission Issues
-
-- See [PERMISSIONS.md](PERMISSIONS.md) for detailed permission troubleshooting
-- Run `uv run python demo_permissions.py` to check permission status
-- Grant Accessibility and Screen Recording permissions in System Preferences
+Permissions issues:
+- Open System Settings → Privacy & Security → Accessibility / Screen Recording and ensure SpaceWarp is enabled
+- Restart the app after changing permissions
 
 ## License
 
-This project is proprietary software. All rights reserved.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
 ## Support
 
-For support and feature requests, please contact the development team.
+For issues and feature requests, please open an issue in the repository or contact the maintainers.

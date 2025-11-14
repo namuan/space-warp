@@ -112,8 +112,7 @@ class SystemTrayIcon(QSystemTrayIcon):
 
     def on_activated(self, reason):
         """Handle tray icon activation"""
-        if reason == QSystemTrayIcon.ActivationReason.Trigger:
-            self.show_main_window()
+        pass
 
     def show_main_window(self):
         """Show the main window"""
