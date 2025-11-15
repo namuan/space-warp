@@ -191,6 +191,7 @@ class MainWindow(QMainWindow):
         self.snapshot_windows_table = QTableWidget()
         self.snapshot_windows_table.setColumnCount(11)
         self.snapshot_windows_table.setHorizontalHeaderLabels([
+            "",
             "App",
             "Title",
             "X",
@@ -201,13 +202,12 @@ class MainWindow(QMainWindow):
             "Hidden",
             "Display",
             "PID",
-            "",
         ])
         self.snapshot_windows_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.snapshot_windows_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.snapshot_windows_table.setAlternatingRowColors(True)
         self.snapshot_windows_table.setSortingEnabled(True)
-        self.snapshot_windows_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.snapshot_windows_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         self.snapshot_windows_table.verticalHeader().setVisible(False)
         layout.addWidget(self.snapshot_windows_table)
 
@@ -509,6 +509,7 @@ class MainWindow(QMainWindow):
                 self.snapshot_windows_table.setRowCount(len(snapshot.windows))
                 self.snapshot_windows_table.setColumnCount(11)
                 self.snapshot_windows_table.setHorizontalHeaderLabels([
+                    "",
                     "App",
                     "Title",
                     "X",
@@ -519,20 +520,9 @@ class MainWindow(QMainWindow):
                     "Hidden",
                     "Display",
                     "PID",
-                    "",
                 ])
                 for i, w in enumerate(snapshot.windows):
                     disp_name = display_name_map.get(w.display_id, "?")
-                    self.snapshot_windows_table.setItem(i, 0, QTableWidgetItem(str(w.app_name)))
-                    self.snapshot_windows_table.setItem(i, 1, QTableWidgetItem(str(w.window_title)))
-                    self.snapshot_windows_table.setItem(i, 2, QTableWidgetItem(str(w.x)))
-                    self.snapshot_windows_table.setItem(i, 3, QTableWidgetItem(str(w.y)))
-                    self.snapshot_windows_table.setItem(i, 4, QTableWidgetItem(str(w.width)))
-                    self.snapshot_windows_table.setItem(i, 5, QTableWidgetItem(str(w.height)))
-                    self.snapshot_windows_table.setItem(i, 6, QTableWidgetItem("Yes" if w.is_minimized else "No"))
-                    self.snapshot_windows_table.setItem(i, 7, QTableWidgetItem("Yes" if w.is_hidden else "No"))
-                    self.snapshot_windows_table.setItem(i, 8, QTableWidgetItem(str(disp_name)))
-                    self.snapshot_windows_table.setItem(i, 9, QTableWidgetItem(str(w.pid)))
                     btn = QPushButton("✕")
                     btn.setFixedSize(24, 24)
                     btn.setStyleSheet(
@@ -545,9 +535,19 @@ class MainWindow(QMainWindow):
                     lay.setContentsMargins(0, 0, 0, 0)
                     lay.setAlignment(Qt.AlignmentFlag.AlignCenter)
                     lay.addWidget(btn)
-                    self.snapshot_windows_table.setCellWidget(i, 10, container)
+                    self.snapshot_windows_table.setCellWidget(i, 0, container)
                     self.snapshot_windows_table.setRowHeight(i, 28)
-                self.snapshot_windows_table.setColumnWidth(10, 40)
+                    self.snapshot_windows_table.setItem(i, 1, QTableWidgetItem(str(w.app_name)))
+                    self.snapshot_windows_table.setItem(i, 2, QTableWidgetItem(str(w.window_title)))
+                    self.snapshot_windows_table.setItem(i, 3, QTableWidgetItem(str(w.x)))
+                    self.snapshot_windows_table.setItem(i, 4, QTableWidgetItem(str(w.y)))
+                    self.snapshot_windows_table.setItem(i, 5, QTableWidgetItem(str(w.width)))
+                    self.snapshot_windows_table.setItem(i, 6, QTableWidgetItem(str(w.height)))
+                    self.snapshot_windows_table.setItem(i, 7, QTableWidgetItem("Yes" if w.is_minimized else "No"))
+                    self.snapshot_windows_table.setItem(i, 8, QTableWidgetItem("Yes" if w.is_hidden else "No"))
+                    self.snapshot_windows_table.setItem(i, 9, QTableWidgetItem(str(disp_name)))
+                    self.snapshot_windows_table.setItem(i, 10, QTableWidgetItem(str(w.pid)))
+                self.snapshot_windows_table.setColumnWidth(0, 40)
             else:
                 self.snapshot_windows_table.setRowCount(0)
         else:
