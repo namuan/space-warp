@@ -534,8 +534,20 @@ class MainWindow(QMainWindow):
                     self.snapshot_windows_table.setItem(i, 8, QTableWidgetItem(str(disp_name)))
                     self.snapshot_windows_table.setItem(i, 9, QTableWidgetItem(str(w.pid)))
                     btn = QPushButton("✕")
+                    btn.setFixedSize(24, 24)
+                    btn.setStyleSheet(
+                        "QPushButton { background-color: #b71c1c; color: white; border: none; border-radius: 4px; }"
+                        "QPushButton:hover { background-color: #8b0000; }"
+                    )
                     btn.clicked.connect(lambda _, a=w.app_name, s=snapshot.name: self._remove_app_from_snapshot_row(s, a))
-                    self.snapshot_windows_table.setCellWidget(i, 10, btn)
+                    container = QWidget()
+                    lay = QHBoxLayout(container)
+                    lay.setContentsMargins(0, 0, 0, 0)
+                    lay.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    lay.addWidget(btn)
+                    self.snapshot_windows_table.setCellWidget(i, 10, container)
+                    self.snapshot_windows_table.setRowHeight(i, 28)
+                self.snapshot_windows_table.setColumnWidth(10, 40)
             else:
                 self.snapshot_windows_table.setRowCount(0)
         else:
