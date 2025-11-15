@@ -20,7 +20,9 @@ from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QDockWidget,
-    QInputDialog,
+    QTableWidget,
+    QTableWidgetItem,
+    QHeaderView,
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction, QKeySequence, QFont
@@ -186,6 +188,29 @@ class MainWindow(QMainWindow):
         self.snapshot_info.setReadOnly(True)
         layout.addWidget(self.snapshot_info)
 
+        self.snapshot_windows_table = QTableWidget()
+        self.snapshot_windows_table.setColumnCount(11)
+        self.snapshot_windows_table.setHorizontalHeaderLabels([
+            "App",
+            "Title",
+            "X",
+            "Y",
+            "Width",
+            "Height",
+            "Minimized",
+            "Hidden",
+            "Display",
+            "PID",
+            "",
+        ])
+        self.snapshot_windows_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.snapshot_windows_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.snapshot_windows_table.setAlternatingRowColors(True)
+        self.snapshot_windows_table.setSortingEnabled(True)
+        self.snapshot_windows_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.snapshot_windows_table.verticalHeader().setVisible(False)
+        layout.addWidget(self.snapshot_windows_table)
+
         # Control buttons
         button_layout = QHBoxLayout()
 
@@ -204,10 +229,6 @@ class MainWindow(QMainWindow):
         self.view_json_btn = QPushButton("View Raw JSON")
         self.view_json_btn.clicked.connect(self.view_raw_json)
         button_layout.addWidget(self.view_json_btn)
-
-        self.remove_app_btn = QPushButton("Remove App...")
-        self.remove_app_btn.clicked.connect(self.remove_app_from_selected_snapshot)
-        button_layout.addWidget(self.remove_app_btn)
 
         layout.addLayout(button_layout)
 
@@ -476,18 +497,6 @@ class MainWindow(QMainWindow):
                     )
 
                 display_name_map = {d.display_id: d.name for d in snapshot.displays}
-                lines.append("")
-                lines.append(f"Windows ({len(snapshot.windows)}):")
-                for w in snapshot.windows:
-                    disp_name = display_name_map.get(w.display_id, "?")
-                    status = ""
-                    if w.is_minimized:
-                        status = " [Minimized]"
-                    elif w.is_hidden:
-                        status = " [Hidden]"
-                    lines.append(
-                        f"- {w.app_name} | {w.window_title}{status} pid={w.pid} x={w.x} y={w.y} w={w.width} h={w.height} display_id={w.display_id} display={disp_name}"
-                    )
 
                 if snapshot.metadata:
                     lines.append("")
@@ -496,6 +505,41 @@ class MainWindow(QMainWindow):
                         lines.append(f"- {k}: {v}")
 
                 self.snapshot_info.setPlainText("\n".join(lines))
+
+                self.snapshot_windows_table.setRowCount(len(snapshot.windows))
+                self.snapshot_windows_table.setColumnCount(11)
+                self.snapshot_windows_table.setHorizontalHeaderLabels([
+                    "App",
+                    "Title",
+                    "X",
+                    "Y",
+                    "Width",
+                    "Height",
+                    "Minimized",
+                    "Hidden",
+                    "Display",
+                    "PID",
+                    "",
+                ])
+                for i, w in enumerate(snapshot.windows):
+                    disp_name = display_name_map.get(w.display_id, "?")
+                    self.snapshot_windows_table.setItem(i, 0, QTableWidgetItem(str(w.app_name)))
+                    self.snapshot_windows_table.setItem(i, 1, QTableWidgetItem(str(w.window_title)))
+                    self.snapshot_windows_table.setItem(i, 2, QTableWidgetItem(str(w.x)))
+                    self.snapshot_windows_table.setItem(i, 3, QTableWidgetItem(str(w.y)))
+                    self.snapshot_windows_table.setItem(i, 4, QTableWidgetItem(str(w.width)))
+                    self.snapshot_windows_table.setItem(i, 5, QTableWidgetItem(str(w.height)))
+                    self.snapshot_windows_table.setItem(i, 6, QTableWidgetItem("Yes" if w.is_minimized else "No"))
+                    self.snapshot_windows_table.setItem(i, 7, QTableWidgetItem("Yes" if w.is_hidden else "No"))
+                    self.snapshot_windows_table.setItem(i, 8, QTableWidgetItem(str(disp_name)))
+                    self.snapshot_windows_table.setItem(i, 9, QTableWidgetItem(str(w.pid)))
+                    btn = QPushButton("✕")
+                    btn.clicked.connect(lambda _, a=w.app_name, s=snapshot.name: self._remove_app_from_snapshot_row(s, a))
+                    self.snapshot_windows_table.setCellWidget(i, 10, btn)
+            else:
+                self.snapshot_windows_table.setRowCount(0)
+        else:
+            self.snapshot_windows_table.setRowCount(0)
 
     def view_raw_json(self):
         current_item = self.snapshot_list.currentItem()
@@ -702,38 +746,13 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Error deleting snapshot: {e}")
 
-    def remove_app_from_selected_snapshot(self):
-        current_item = self.snapshot_list.currentItem()
-        if not current_item:
-            QMessageBox.warning(self, "Warning", "Please select a snapshot.")
-            return
-
-        snapshot = current_item.data(Qt.ItemDataRole.UserRole)
-        if not snapshot:
-            return
-
-        app_names = sorted({w.app_name for w in snapshot.windows})
-        if not app_names:
-            QMessageBox.information(self, "Info", "No applications in this snapshot.")
-            return
-
-        selected, ok = QInputDialog.getItem(
-            self,
-            "Remove App",
-            "Select application to remove:",
-            app_names,
-            0,
-            False,
-        )
-        if not ok or not selected:
-            return
-
+    def _remove_app_from_snapshot_row(self, snapshot_name: str, app_name: str):
         try:
-            success = self.snapshot_manager.remove_app_from_snapshot(snapshot.name, selected)
+            success = self.snapshot_manager.remove_app_from_snapshot(snapshot_name, app_name)
             if success:
                 self.load_snapshots()
-                self.select_snapshot_by_name(snapshot.name)
-                self.status_bar.showMessage(f"Removed '{selected}' from snapshot '{snapshot.name}'")
+                self.select_snapshot_by_name(snapshot_name)
+                self.status_bar.showMessage(f"Removed '{app_name}' from snapshot '{snapshot_name}'")
             else:
                 QMessageBox.warning(self, "Warning", "Application not found or removal failed.")
         except Exception as e:
