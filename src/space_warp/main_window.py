@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QDockWidget,
+    QInputDialog,
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction, QKeySequence, QFont
@@ -203,6 +204,10 @@ class MainWindow(QMainWindow):
         self.view_json_btn = QPushButton("View Raw JSON")
         self.view_json_btn.clicked.connect(self.view_raw_json)
         button_layout.addWidget(self.view_json_btn)
+
+        self.remove_app_btn = QPushButton("Remove App...")
+        self.remove_app_btn.clicked.connect(self.remove_app_from_selected_snapshot)
+        button_layout.addWidget(self.remove_app_btn)
 
         layout.addLayout(button_layout)
 
@@ -696,6 +701,43 @@ class MainWindow(QMainWindow):
 
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Error deleting snapshot: {e}")
+
+    def remove_app_from_selected_snapshot(self):
+        current_item = self.snapshot_list.currentItem()
+        if not current_item:
+            QMessageBox.warning(self, "Warning", "Please select a snapshot.")
+            return
+
+        snapshot = current_item.data(Qt.ItemDataRole.UserRole)
+        if not snapshot:
+            return
+
+        app_names = sorted({w.app_name for w in snapshot.windows})
+        if not app_names:
+            QMessageBox.information(self, "Info", "No applications in this snapshot.")
+            return
+
+        selected, ok = QInputDialog.getItem(
+            self,
+            "Remove App",
+            "Select application to remove:",
+            app_names,
+            0,
+            False,
+        )
+        if not ok or not selected:
+            return
+
+        try:
+            success = self.snapshot_manager.remove_app_from_snapshot(snapshot.name, selected)
+            if success:
+                self.load_snapshots()
+                self.select_snapshot_by_name(snapshot.name)
+                self.status_bar.showMessage(f"Removed '{selected}' from snapshot '{snapshot.name}'")
+            else:
+                QMessageBox.warning(self, "Warning", "Application not found or removal failed.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Error removing application: {e}")
 
     def show_window_manager(self):
         """Show window manager dialog"""

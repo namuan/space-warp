@@ -201,6 +201,33 @@ class SnapshotManager(QObject):
             print(f"Error deleting snapshot {name}: {e}")
             return False
 
+    def remove_app_from_snapshot(self, name: str, app_name: str) -> bool:
+        try:
+            snapshot = self.get_snapshot(name)
+            if not snapshot:
+                return False
+            filtered = [w for w in snapshot.windows if w.app_name != app_name]
+            if len(filtered) == len(snapshot.windows):
+                return False
+            windows_json = json.dumps([asdict(w) for w in filtered], default=str)
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE snapshots
+                SET windows_json = ?, created_at = CURRENT_TIMESTAMP
+                WHERE name = ? AND is_active = 1
+                """,
+                (windows_json, name),
+            )
+            conn.commit()
+            conn.close()
+            self.snapshot_saved.emit(name)
+            return True
+        except Exception as e:
+            print(f"Error removing app '{app_name}' from snapshot {name}: {e}")
+            return False
+
     def restore_snapshot(self, name: str, window_manager) -> bool:
         snapshot = self.get_snapshot(name)
         if not snapshot:
