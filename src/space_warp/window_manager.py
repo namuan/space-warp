@@ -58,6 +58,70 @@ class WindowManager(QObject):
         self.workspace = NSWorkspace.sharedWorkspace()
         self._permissions_granted = self._check_permissions()
 
+    # ------------------------------
+    # App visibility helpers
+    # ------------------------------
+    def _hide_app_by_ref(self, app_ref) -> bool:
+        """Hide an NSRunningApplication reference. Returns True if a request was made."""
+        try:
+            # 0 = regular app; utility/background apps shouldn't be toggled
+            if app_ref and app_ref.activationPolicy() == 0 and not app_ref.isHidden():
+                app_ref.hide()
+                return True
+        except Exception as e:
+            print(f"Error hiding app: {e}")
+        return False
+
+    def _unhide_app_by_ref(self, app_ref) -> bool:
+        """Unhide an NSRunningApplication reference. Returns True if a request was made."""
+        try:
+            if app_ref and app_ref.activationPolicy() == 0 and app_ref.isHidden():
+                app_ref.unhide()
+                return True
+        except Exception as e:
+            print(f"Error unhiding app: {e}")
+        return False
+
+    def _hide_non_profile_apps(self, snapshot) -> None:
+        """Hide all currently running regular apps that are not present in the target snapshot.
+
+        The goal is to keep non‑profile apps safe (not quit) while keeping the
+        workspace focused. Apps included in the snapshot will remain visible or
+        get unhidden during restore.
+        """
+        try:
+            running = self.workspace.runningApplications()
+            keep_names = {w.app_name for w in snapshot.windows if getattr(w, 'app_name', None)}
+            keep_bundles = {w.bundle_id for w in snapshot.windows if getattr(w, 'bundle_id', None)}
+
+            for app in running:
+                try:
+                    # Skip non-regular apps
+                    if app.activationPolicy() != 0:
+                        continue
+
+                    name = None
+                    bid = None
+                    try:
+                        name = app.localizedName()
+                    except Exception:
+                        pass
+                    try:
+                        bid = app.bundleIdentifier()
+                    except Exception:
+                        pass
+
+                    # If app is part of the profile (by bundle id or name), do not hide
+                    if (bid and bid in keep_bundles) or (name and name in keep_names):
+                        continue
+
+                    self._hide_app_by_ref(app)
+                except Exception:
+                    # Continue on best-effort basis
+                    continue
+        except Exception as e:
+            print(f"Error hiding non-profile apps: {e}")
+
     def _check_permissions(self) -> bool:
         """Check if the app has necessary permissions"""
         try:
@@ -468,6 +532,9 @@ class WindowManager(QObject):
 
     def restore_layout(self, snapshot) -> bool:
         try:
+            # First, hide all other running apps to keep the desktop focused on this profile
+            self._hide_non_profile_apps(snapshot)
+
             current = self.get_windows()
             ok = True
             for w in snapshot.windows:
@@ -477,6 +544,15 @@ class WindowManager(QObject):
                 if candidates:
                     exact = [cw for cw in candidates if cw.window_title == w.window_title]
                     chosen = exact[0] if exact else candidates[0]
+                    # Ensure app is visible
+                    try:
+                        apps = self.workspace.runningApplications()
+                        for app in apps:
+                            if app.processIdentifier() == chosen.pid:
+                                self._unhide_app_by_ref(app)
+                                break
+                    except Exception:
+                        pass
                     self._activate_app(chosen.pid)
                     time.sleep(0.1)
                     need_move = (
@@ -521,6 +597,15 @@ class WindowManager(QObject):
                         except Exception:
                             pass
                         continue
+                    # Unhide and activate newly launched app
+                    try:
+                        apps = self.workspace.runningApplications()
+                        for app in apps:
+                            if app.localizedName() == w.app_name or (w.bundle_id and app.bundleIdentifier() == w.bundle_id):
+                                self._unhide_app_by_ref(app)
+                                break
+                    except Exception:
+                        pass
                     self._activate_app(chosen.pid)
                     time.sleep(0.1)
                     self._move_window(
@@ -541,6 +626,9 @@ class WindowManager(QObject):
 
     def restore_layout_with_report(self, snapshot) -> tuple[bool, list[dict[str, Any]]]:
         try:
+            # Hide irrelevant apps first
+            self._hide_non_profile_apps(snapshot)
+
             current = self.get_windows()
             ok = True
             items: list[dict[str, Any]] = []
@@ -558,6 +646,15 @@ class WindowManager(QObject):
                 if candidates:
                     exact = [cw for cw in candidates if cw.window_title == w.window_title]
                     chosen = exact[0] if exact else candidates[0]
+                    # Ensure visibility
+                    try:
+                        apps = self.workspace.runningApplications()
+                        for app in apps:
+                            if app.processIdentifier() == chosen.pid:
+                                self._unhide_app_by_ref(app)
+                                break
+                    except Exception:
+                        pass
                     self._activate_app(chosen.pid)
                     time.sleep(0.1)
                     need_move = (
@@ -609,6 +706,15 @@ class WindowManager(QObject):
                             pass
                         items.append(entry)
                         continue
+                    # Ensure visibility of launched app
+                    try:
+                        apps = self.workspace.runningApplications()
+                        for app in apps:
+                            if app.localizedName() == w.app_name or (w.bundle_id and app.bundleIdentifier() == w.bundle_id):
+                                self._unhide_app_by_ref(app)
+                                break
+                    except Exception:
+                        pass
                     self._activate_app(chosen.pid)
                     time.sleep(0.1)
                     self._move_window(
