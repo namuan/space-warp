@@ -230,6 +230,10 @@ class MainWindow(QMainWindow):
         self.view_json_btn.clicked.connect(self.view_raw_json)
         button_layout.addWidget(self.view_json_btn)
 
+        self.view_debug_panel_btn = QPushButton("View Debug Panel")
+        self.view_debug_panel_btn.clicked.connect(self.toggle_debug_panel)
+        button_layout.addWidget(self.view_debug_panel_btn)
+
         layout.addLayout(button_layout)
 
         return group
@@ -842,3 +846,14 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage(
                 "Permissions still required for full functionality"
             )
+
+    def toggle_debug_panel(self):
+        if hasattr(self, "debug_dock"):
+            if self.debug_dock.isVisible():
+                self.debug_dock.hide()
+                if hasattr(self, "view_debug_panel_btn"):
+                    self.view_debug_panel_btn.setText("View Debug Panel")
+            else:
+                self.debug_dock.show()
+                if hasattr(self, "view_debug_panel_btn"):
+                    self.view_debug_panel_btn.setText("Hide Debug Panel")
