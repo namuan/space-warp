@@ -7,6 +7,7 @@ from typing import Any
 import subprocess
 from dataclasses import dataclass
 from PyQt6.QtCore import QObject, pyqtSignal
+import ctypes
 from PyQt6.QtWidgets import QApplication
 
 import Quartz
@@ -28,6 +29,8 @@ class WindowInfo:
     display_id: int
     pid: int
     bundle_id: str | None = None
+    space_id: int | None = None
+    window_id: int | None = None
 
 
 @dataclass
@@ -57,6 +60,9 @@ class WindowManager(QObject):
         super().__init__()
         self.workspace = NSWorkspace.sharedWorkspace()
         self._permissions_granted = self._check_permissions()
+        self._skylight = None
+        self._cf = None
+        self._init_skylight()
 
     # ------------------------------
     # App visibility helpers
@@ -71,6 +77,78 @@ class WindowManager(QObject):
         except Exception as e:
             print(f"Error hiding app: {e}")
         return False
+
+    def _init_skylight(self) -> None:
+        try:
+            self._skylight = ctypes.CDLL("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight")
+            self._cf = ctypes.CDLL("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
+        except Exception:
+            self._skylight = None
+            self._cf = None
+
+    def _window_to_space_map(self) -> dict[int, int]:
+        if not self._skylight or not self._cf:
+            return {}
+        try:
+            conn = ctypes.c_uint32.in_dll(self._skylight, "SLSMainConnectionID")
+        except Exception:
+            try:
+                get_conn = getattr(self._skylight, "SLSMainConnectionID")
+                get_conn.restype = ctypes.c_uint32
+                conn = ctypes.c_uint32(get_conn())
+            except Exception:
+                return {}
+        try:
+            copy_spaces = getattr(self._skylight, "SLSCopyManagedDisplaySpaces")
+            copy_spaces.restype = ctypes.c_void_p
+            spaces_ref = copy_spaces(conn)
+            if not spaces_ref:
+                return {}
+        except Exception:
+            return {}
+        try:
+            CFArrayGetCount = self._cf.CFArrayGetCount
+            CFArrayGetCount.restype = ctypes.c_long
+            CFArrayGetValueAtIndex = self._cf.CFArrayGetValueAtIndex
+            CFArrayGetValueAtIndex.restype = ctypes.c_void_p
+            CFDictionaryGetValue = self._cf.CFDictionaryGetValue
+            CFDictionaryGetValue.restype = ctypes.c_void_p
+            CFStringCreateWithCString = self._cf.CFStringCreateWithCString
+            CFStringCreateWithCString.restype = ctypes.c_void_p
+            CFNumberGetValue = self._cf.CFNumberGetValue
+            CFNumberGetValue.restype = ctypes.c_bool
+            kCFStringEncodingUTF8 = 0x08000100
+            result: dict[int, int] = {}
+            count = CFArrayGetCount(spaces_ref)
+            for i in range(count):
+                display_dict = CFArrayGetValueAtIndex(spaces_ref, i)
+                key_spaces = CFStringCreateWithCString(None, b"Spaces", kCFStringEncodingUTF8)
+                spaces_arr = CFDictionaryGetValue(display_dict, key_spaces)
+                if not spaces_arr:
+                    continue
+                scount = CFArrayGetCount(spaces_arr)
+                for j in range(scount):
+                    space_dict = CFArrayGetValueAtIndex(spaces_arr, j)
+                    key_id64 = CFStringCreateWithCString(None, b"id64", kCFStringEncodingUTF8)
+                    key_windows = CFStringCreateWithCString(None, b"Windows", kCFStringEncodingUTF8)
+                    id64_ref = CFDictionaryGetValue(space_dict, key_id64)
+                    windows_arr = CFDictionaryGetValue(space_dict, key_windows)
+                    if not id64_ref or not windows_arr:
+                        continue
+                    space_id = ctypes.c_longlong()
+                    ok = CFNumberGetValue(id64_ref, 9, ctypes.byref(space_id))
+                    if not ok:
+                        continue
+                    wcount = CFArrayGetCount(windows_arr)
+                    for k in range(wcount):
+                        wref = CFArrayGetValueAtIndex(windows_arr, k)
+                        wid = ctypes.c_int()
+                        ok2 = CFNumberGetValue(wref, 9, ctypes.byref(wid))
+                        if ok2:
+                            result[int(wid.value)] = int(space_id.value)
+            return result
+        except Exception:
+            return {}
 
     def _unhide_app_by_ref(self, app_ref) -> bool:
         """Unhide an NSRunningApplication reference. Returns True if a request was made."""
@@ -246,7 +324,6 @@ class WindowManager(QObject):
         try:
             apps = self.get_running_apps()
             bundle_by_pid = {a["pid"]: a.get("bundle_id") for a in apps}
-            # Get window list from Quartz Window Services
             window_list = Quartz.CGWindowListCopyWindowInfo(
                 Quartz.kCGWindowListOptionOnScreenOnly
                 | Quartz.kCGWindowListExcludeDesktopElements,
@@ -254,6 +331,7 @@ class WindowManager(QObject):
             )
 
             if window_list:
+                mapping = self._window_to_space_map()
                 for window in window_list:
                     try:
                         # Skip system windows
@@ -265,6 +343,7 @@ class WindowManager(QObject):
                         owner_name = window.get(Quartz.kCGWindowOwnerName, "")
                         window_name = window.get(Quartz.kCGWindowName, "")
                         pid = window.get(Quartz.kCGWindowOwnerPID, 0)
+                        wid = window.get(Quartz.kCGWindowNumber, 0)
 
                         # Skip empty or system windows
                         if not owner_name or owner_name in ["Window Server", "Dock"]:
@@ -306,6 +385,8 @@ class WindowManager(QObject):
                             display_id=display_id,
                             pid=pid,
                             bundle_id=bundle_id,
+                            space_id=mapping.get(int(wid)) if mapping else None,
+                            window_id=int(wid) if wid else None,
                         )
 
                         windows.append(window_info)
@@ -319,6 +400,67 @@ class WindowManager(QObject):
             print(f"Error getting window list: {e}")
             return windows
 
+        return windows
+
+    def get_windows_all_spaces(self, app_name: str | None = None) -> list[WindowInfo]:
+        windows = []
+        if not self._permissions_granted:
+            return windows
+        try:
+            apps = self.get_running_apps()
+            bundle_by_pid = {a["pid"]: a.get("bundle_id") for a in apps}
+            window_list = Quartz.CGWindowListCopyWindowInfo(
+                Quartz.kCGWindowListOptionAll | Quartz.kCGWindowListExcludeDesktopElements,
+                Quartz.kCGNullWindowID,
+            )
+            mapping = self._window_to_space_map()
+            if window_list:
+                for window in window_list:
+                    try:
+                        window_layer = window.get(Quartz.kCGWindowLayer, 0)
+                        if window_layer != 0:
+                            continue
+                        owner_name = window.get(Quartz.kCGWindowOwnerName, "")
+                        window_name = window.get(Quartz.kCGWindowName, "")
+                        pid = window.get(Quartz.kCGWindowOwnerPID, 0)
+                        wid = window.get(Quartz.kCGWindowNumber, 0)
+                        if not owner_name or owner_name in ["Window Server", "Dock"]:
+                            continue
+                        if app_name and owner_name != app_name:
+                            continue
+                        bounds = window.get(Quartz.kCGWindowBounds, {})
+                        if not bounds:
+                            continue
+                        x = bounds.get("X", 0)
+                        y = bounds.get("Y", 0)
+                        width = bounds.get("Width", 0)
+                        height = bounds.get("Height", 0)
+                        if width <= 0 or height <= 0:
+                            continue
+                        display_id = self._get_display_for_window(x, y, width, height)
+                        is_minimized = self._is_window_minimized(pid, window_name)
+                        bundle_id = bundle_by_pid.get(pid)
+                        windows.append(
+                            WindowInfo(
+                                app_name=owner_name,
+                                window_title=window_name,
+                                x=x,
+                                y=y,
+                                width=width,
+                                height=height,
+                                is_minimized=is_minimized,
+                                is_hidden=False,
+                                display_id=display_id,
+                                pid=pid,
+                                bundle_id=bundle_id,
+                                space_id=mapping.get(int(wid)) if mapping else None,
+                                window_id=int(wid) if wid else None,
+                            )
+                        )
+                    except Exception:
+                        continue
+        except Exception:
+            return windows
         return windows
 
     def _get_display_for_window(self, x: int, y: int, width: int, height: int) -> int:

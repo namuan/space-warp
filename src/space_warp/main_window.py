@@ -163,6 +163,10 @@ class MainWindow(QMainWindow):
         self.capture_all_btn.clicked.connect(self.capture_all_windows)
         button_layout.addWidget(self.capture_all_btn)
 
+        self.capture_all_spaces_btn = QPushButton("Capture All Spaces")
+        self.capture_all_spaces_btn.clicked.connect(self.capture_all_spaces)
+        button_layout.addWidget(self.capture_all_spaces_btn)
+
         layout.addLayout(button_layout)
 
         return group
@@ -189,7 +193,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.snapshot_info)
 
         self.snapshot_windows_table = QTableWidget()
-        self.snapshot_windows_table.setColumnCount(11)
+        self.snapshot_windows_table.setColumnCount(13)
         self.snapshot_windows_table.setHorizontalHeaderLabels([
             "",
             "App",
@@ -202,6 +206,8 @@ class MainWindow(QMainWindow):
             "Hidden",
             "Display",
             "PID",
+            "Space",
+            "WinID",
         ])
         self.snapshot_windows_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.snapshot_windows_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -442,8 +448,10 @@ class MainWindow(QMainWindow):
                 lines.append("")
                 lines.append(f"Windows ({len(windows)}):")
                 for w in windows:
+                    sid = getattr(w, "space_id", None)
+                    wid = getattr(w, "window_id", None)
                     lines.append(
-                        f"- {w.app_name} | {w.window_title} pid={w.pid} x={w.x} y={w.y} w={w.width} h={w.height} display_id={w.display_id}"
+                        f"- {w.app_name} | {w.window_title} pid={w.pid} x={w.x} y={w.y} w={w.width} h={w.height} display_id={w.display_id} space_id={sid if sid is not None else ''} window_id={wid if wid is not None else ''}"
                     )
                 if hasattr(self, "debug_info"):
                     self.debug_info.setPlainText("\n".join(lines))
@@ -511,7 +519,7 @@ class MainWindow(QMainWindow):
                 self.snapshot_info.setPlainText("\n".join(lines))
 
                 self.snapshot_windows_table.setRowCount(len(snapshot.windows))
-                self.snapshot_windows_table.setColumnCount(11)
+                self.snapshot_windows_table.setColumnCount(13)
                 self.snapshot_windows_table.setHorizontalHeaderLabels([
                     "",
                     "App",
@@ -524,6 +532,8 @@ class MainWindow(QMainWindow):
                     "Hidden",
                     "Display",
                     "PID",
+                    "Space",
+                    "WinID",
                 ])
                 for i, w in enumerate(snapshot.windows):
                     disp_name = display_name_map.get(w.display_id, "?")
@@ -551,6 +561,8 @@ class MainWindow(QMainWindow):
                     self.snapshot_windows_table.setItem(i, 8, QTableWidgetItem("Yes" if w.is_hidden else "No"))
                     self.snapshot_windows_table.setItem(i, 9, QTableWidgetItem(str(disp_name)))
                     self.snapshot_windows_table.setItem(i, 10, QTableWidgetItem(str(w.pid)))
+                    self.snapshot_windows_table.setItem(i, 11, QTableWidgetItem(str(w.space_id if getattr(w, "space_id", None) is not None else "")))
+                    self.snapshot_windows_table.setItem(i, 12, QTableWidgetItem(str(w.window_id if getattr(w, "window_id", None) is not None else "")))
                 self.snapshot_windows_table.setColumnWidth(0, 40)
             else:
                 self.snapshot_windows_table.setRowCount(0)
@@ -583,6 +595,8 @@ class MainWindow(QMainWindow):
                     "is_hidden": w.is_hidden,
                     "display_id": w.display_id,
                     "pid": w.pid,
+                    "space_id": w.space_id,
+                    "window_id": w.window_id,
                 }
                 for w in snapshot.windows
             ],
@@ -647,6 +661,30 @@ class MainWindow(QMainWindow):
 
         except Exception as e:
             self.status_bar.showMessage(f"Error capturing windows: {e}")
+
+    def capture_all_spaces(self):
+        try:
+            windows = self.window_manager.get_windows_all_spaces()
+            displays = self.window_manager.get_displays()
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            name = f"AllSpaces_{timestamp}"
+            description = f"All-spaces capture with {len(windows)} windows"
+            success = self.snapshot_manager.save_snapshot(
+                name, description, windows, displays
+            )
+            if success:
+                self.load_snapshots()
+                has_space = any(getattr(w, "space_id", None) is not None for w in windows)
+                msg = (
+                    f"All-spaces snapshot '{name}' saved successfully"
+                    if has_space
+                    else f"SkyLight unavailable — captured current space only for '{name}'"
+                )
+                self.status_bar.showMessage(msg)
+            else:
+                self.status_bar.showMessage("Failed to save all-spaces snapshot")
+        except Exception as e:
+            self.status_bar.showMessage(f"Error capturing all spaces: {e}")
 
     def save_snapshot_dialog(self):
         """Show save snapshot dialog"""
