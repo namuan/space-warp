@@ -20,7 +20,7 @@ class Config:
 
         # Default configuration
         self.defaults = {
-            "start_minimized": True,
+            "start_minimized": False,
             "auto_start": False,
             "hotkeys": {
                 "save_snapshot": "Ctrl+Shift+S",

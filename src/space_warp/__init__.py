@@ -13,7 +13,6 @@ from .config import Config
 from .window_manager import WindowManager, WindowInfo, DisplayInfo
 from .snapshot_manager import SnapshotManager, Snapshot
 from .main_window import MainWindow
-from .system_tray import SystemTrayIcon
 from .permissions import PermissionsHelper
 
 __all__ = [
@@ -25,6 +24,5 @@ __all__ = [
     "SnapshotManager",
     "Snapshot",
     "MainWindow",
-    "SystemTrayIcon",
     "PermissionsHelper",
 ]

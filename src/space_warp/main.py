@@ -7,7 +7,6 @@ from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QPalette
 
 from .main_window import MainWindow
-from .system_tray import SystemTrayIcon
 from .window_manager import WindowManager
 from .snapshot_manager import SnapshotManager
 from .config import Config
@@ -16,7 +15,7 @@ from .config import Config
 def main():
     """Main application entry point"""
     app = QApplication(sys.argv)
-    app.setQuitOnLastWindowClosed(False)
+    app.setQuitOnLastWindowClosed(True)
 
     # Set application metadata
     app.setApplicationName("SpaceWarp")
@@ -37,15 +36,8 @@ def main():
     # Create main window (initially hidden)
     main_window = MainWindow(window_manager, snapshot_manager, config)
 
-    # Create system tray icon
-    tray_icon = SystemTrayIcon(main_window, config)
-    tray_icon.show()
 
-    # Apply any saved settings
-    if config.get("start_minimized", True):
-        main_window.hide()
-    else:
-        main_window.show()
+    main_window.show()
 
     return app.exec()
 

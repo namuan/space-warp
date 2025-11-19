@@ -26,7 +26,6 @@ a = Analysis(['src/space_warp/__main__.py'],
                  'space_warp.window_manager',
                  'space_warp.snapshot_manager',
                  'space_warp.main_window',
-                 'space_warp.system_tray',
                  'space_warp.permissions',
              ],
              hookspath=None,
@@ -75,6 +74,6 @@ app = BUNDLE(coll,
                'LSMinimumSystemVersion': '10.14.0',
                'NSRequiresAquaSystemAppearance': False,
                'NSAppleEventsUsageDescription': 'SpaceWarp automates window management.',
-               'LSUIElement': True,
-               }
+               'LSUIElement': False,
+              }
              )
