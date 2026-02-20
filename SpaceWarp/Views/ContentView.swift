@@ -69,6 +69,7 @@ struct ContentView: View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             WindowListView()
                 .navigationTitle("Current Windows")
+                .navigationSplitViewColumnWidth(min: 250, ideal: 300, max: 400)
                 .toolbar {
                     ToolbarItemGroup {
                         if windowViewModel.isLoading {
@@ -94,6 +95,7 @@ struct ContentView: View {
         } content: {
             SnapshotListView()
                 .navigationTitle("Saved Snapshots")
+                .navigationSplitViewColumnWidth(min: 300, ideal: 400, max: 500)
         } detail: {
             if let snapshot = snapshotViewModel.selectedSnapshot {
                 SnapshotDetailView(snapshot: snapshot) {
