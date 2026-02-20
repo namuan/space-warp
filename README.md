@@ -1,5 +1,5 @@
 <p style="text-align: center;">
-  <img alt="Application Logo" src="https://github.com/namuan/space-warp/raw/main/assets/space-warp-icon.png" width="128px"/>
+  <img alt="Application Logo" src="https://github.com/namuan/space-warp/raw/main/assets/icon.png" width="128px"/>
 </p>
 <h3 style="text-align: center;">SpaceWarp :: Name It, Save It, Warp Back Anytime</h3>
 
