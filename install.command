@@ -59,6 +59,43 @@ reset_permissions() {
     fi
 }
 
+# Function to convert PNG to ICNS
+create_icns() {
+    local source_png="$1"
+    local output_icns="$2"
+    local iconset_dir="${output_icns%.icns}.iconset"
+    
+    info "Converting icon to ICNS format..."
+    
+    # Create iconset directory
+    rm -rf "$iconset_dir"
+    mkdir -p "$iconset_dir"
+    
+    # Generate all required icon sizes using sips
+    # Standard sizes for macOS
+    sips -z 16 16     "$source_png" --out "$iconset_dir/icon_16x16.png" 2>/dev/null
+    sips -z 32 32     "$source_png" --out "$iconset_dir/icon_16x16@2x.png" 2>/dev/null
+    sips -z 32 32     "$source_png" --out "$iconset_dir/icon_32x32.png" 2>/dev/null
+    sips -z 64 64     "$source_png" --out "$iconset_dir/icon_32x32@2x.png" 2>/dev/null
+    sips -z 128 128   "$source_png" --out "$iconset_dir/icon_128x128.png" 2>/dev/null
+    sips -z 256 256   "$source_png" --out "$iconset_dir/icon_128x128@2x.png" 2>/dev/null
+    sips -z 256 256   "$source_png" --out "$iconset_dir/icon_256x256.png" 2>/dev/null
+    sips -z 512 512   "$source_png" --out "$iconset_dir/icon_256x256@2x.png" 2>/dev/null
+    sips -z 512 512   "$source_png" --out "$iconset_dir/icon_512x512.png" 2>/dev/null
+    sips -z 1024 1024 "$source_png" --out "$iconset_dir/icon_512x512@2x.png" 2>/dev/null
+    
+    # Convert to icns
+    if iconutil -c icns "$iconset_dir" -o "$output_icns" 2>/dev/null; then
+        success "Icon created successfully"
+    else
+        warn "Could not create ICNS, using placeholder"
+        touch "$output_icns"
+    fi
+    
+    # Cleanup
+    rm -rf "$iconset_dir"
+}
+
 # Get script directory (handles various execution methods)
 get_script_dir() {
     # Try different methods to find the script location
@@ -238,9 +275,16 @@ PLIST
 # Create PkgInfo
 echo -n "APPL????" > "$APP_CONTENTS/PkgInfo"
 
-# Create a simple app icon (placeholder)
-info "Creating application icon..."
-touch "$APP_RESOURCES/AppIcon.icns"
+# Create application icon from assets/icon.png
+ICON_SOURCE="$PROJECT_ROOT/assets/icon.png"
+ICON_OUTPUT="$APP_RESOURCES/AppIcon.icns"
+
+if [ -f "$ICON_SOURCE" ]; then
+    create_icns "$ICON_SOURCE" "$ICON_OUTPUT"
+else
+    warn "Icon source not found at $ICON_SOURCE, using placeholder"
+    touch "$ICON_OUTPUT"
+fi
 
 # Ensure destination directory exists
 info "Preparing destination..."
