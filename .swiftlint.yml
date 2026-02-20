@@ -1,0 +1,154 @@
+# SwiftLint Configuration for SpaceWarp
+# https://github.com/realm/SwiftLint
+
+# Disable rules from the default enabled set
+disabled_rules:
+  - trailing_whitespace  # Handled by editor
+  - todo                 # We want to keep TODOs
+  - multiple_closures_with_trailing_closure  # Common in SwiftUI
+  - fallthrough          # Sometimes intentional
+
+# Enable rules that are not enabled by default
+opt_in_rules:
+  # Performance
+  - empty_count
+  - first_where
+  - last_where
+  - contains_over_filter_count
+  - contains_over_filter_is_empty
+  - contains_over_first_not_nil
+  - collection_alignment
+  
+  # Code quality
+  - closure_end_indentation
+  - closure_spacing
+  - explicit_init
+  - implicit_return
+  - literal_expression_end_indentation
+  - operator_usage_whitespace
+  - redundant_nil_coalescing
+  - sorted_first_last
+  - sorted_imports
+  - unneeded_parentheses_in_closure_argument
+  - vertical_parameter_alignment_on_call
+  - yoda_condition
+  - prohibited_interface_builder
+  
+  # Documentation
+  - documentation_above_button
+  - missing_docs
+  
+  # Swift concurrency
+  - no_space_in_method_call
+  - redundant_type_annotation
+  
+  # Error handling
+  - force_unwrapping
+  - force_cast
+  - force_try
+  
+  # SwiftUIt specific
+  - attributes
+
+# Excluded paths
+excluded:
+  - Build
+  - .build
+  - DerivedData
+  - Carthage
+  - Pods
+  - SpaceWarpTests
+  - Package.swift
+
+# Configurable rules
+line_length:
+  warning: 120
+  error: 200
+  ignores_function_declarations: true
+  ignores_comments: true
+  ignores_urls: true
+
+file_length:
+  warning: 500
+  error: 800
+  ignore_comment_only_lines: true
+
+function_body_length:
+  warning: 50
+  error: 100
+
+function_parameter_count:
+  warning: 5
+  error: 8
+
+type_body_length:
+  warning: 300
+  error: 500
+
+type_name:
+  min_length: 3
+  max_length: 40
+  allowed_symbols: ["_"]
+  validates_start_with_lowercase: false
+  excluded:
+    - T  # Generic types
+
+identifier_name:
+  min_length:
+    warning: 2
+    error: 1
+  max_length:
+    warning: 40
+    error: 50
+  excluded:
+    - id
+    - x
+    - y
+    - db
+    - URL
+  validates_start_with_lowercase: false
+
+cyclomatic_complexity:
+  warning: 15
+  error: 25
+
+nesting:
+  type_level:
+    warning: 2
+    error: 3
+
+large_tuple:
+  warning: 3
+  error: 4
+
+# Custom rules
+custom_rules:
+  # Prefer async/await over completion handlers
+  avoid_completion_handler:
+    name: "Avoid Completion Handler"
+    regex: "completion:\\s*@escaping"
+    severity: warning
+    match_kinds:
+      - func.decl
+    
+  # Mark TODOs properly
+  todo_format:
+    name: "TODO Format"
+    regex: "//\\s*(TODO|FIXME):\\s*\\w+"
+    match_kinds: comment
+    message: "TODOs should follow format: // TODO: Description"
+    severity: warning
+    
+  # No print statements in production
+  no_print:
+    name: "Avoid print()"
+    regex: "\\bprint\\s*\\("
+    severity: warning
+    match_kinds:
+      - expr
+
+# Reporter type
+reporter: "xcode"
+
+# Strict mode
+strict: true
