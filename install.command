@@ -47,16 +47,6 @@ reset_permissions() {
     else
         warn "tccutil not found. Please reset permissions manually in System Settings > Privacy & Security."
     fi
-    
-    # Also remove old database to start fresh
-    local db_path="$HOME/Library/Application Support/SpaceWarp/SpaceWarp.db"
-    if [ -f "$db_path" ]; then
-        info "Removing old database..."
-        rm -f "$db_path"
-        rm -f "${db_path}-journal" 2>/dev/null || true
-        rm -f "${db_path}-wal" 2>/dev/null || true
-        rm -f "${db_path}-shm" 2>/dev/null || true
-    fi
 }
 
 # Function to convert PNG to ICNS
