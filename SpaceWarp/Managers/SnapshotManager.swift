@@ -28,10 +28,12 @@ final class SnapshotManager: ObservableObject {
     // MARK: - Initialization
     
     init(configManager: ConfigManager) {
+        LoggerService.shared.info("SnapshotManager initializing", category: "SnapshotManager")
         self.configManager = configManager
         self.repository = SnapshotRepository()
         
         Task {
+            LoggerService.shared.debug("Starting initial snapshot load", category: "SnapshotManager")
             await loadSnapshots()
             await startAutoSaveIfNeeded()
         }
@@ -52,6 +54,9 @@ final class SnapshotManager: ObservableObject {
         windows: [WindowInfo],
         displays: [DisplayInfo]
     ) async throws -> Snapshot {
+        LoggerService.shared.info("Saving snapshot: \(name)", category: "SnapshotManager")
+        LoggerService.shared.debug("Snapshot details - windows: \(windows.count), displays: \(displays.count)", category: "SnapshotManager")
+        
         let snapshot = Snapshot(
             name: name,
             description: description,
@@ -59,7 +64,10 @@ final class SnapshotManager: ObservableObject {
             displays: displays
         )
         
+        LoggerService.shared.debug("Saving snapshot to repository: \(snapshot.id)", category: "SnapshotManager")
         try await repository.save(snapshot)
+        LoggerService.shared.info("Snapshot saved to database: \(snapshot.id)", category: "SnapshotManager")
+        
         snapshots.append(snapshot)
         notifySnapshotsChanged()
         
@@ -82,13 +90,20 @@ final class SnapshotManager: ObservableObject {
     
     /// Loads all snapshots from storage
     func loadSnapshots() async {
+        LoggerService.shared.info("Loading snapshots from database", category: "SnapshotManager")
         isLoading = true
-        defer { isLoading = false }
+        defer { 
+            isLoading = false
+            LoggerService.shared.debug("loadSnapshots completed", category: "SnapshotManager")
+        }
         
         do {
             snapshots = try await repository.loadAll()
+            LoggerService.shared.info("Loaded \(snapshots.count) snapshots from database", category: "SnapshotManager")
+            LoggerService.shared.debug("Snapshot IDs: \(snapshots.map { $0.id.uuidString }.joined(separator: ", "))", category: "SnapshotManager")
             lastError = nil
         } catch {
+            LoggerService.shared.error("Failed to load snapshots: \(error.localizedDescription)", category: "SnapshotManager")
             lastError = error
             snapshots = []
         }
@@ -97,7 +112,12 @@ final class SnapshotManager: ObservableObject {
     /// Deletes a snapshot
     /// - Parameter snapshot: Snapshot to delete
     func deleteSnapshot(_ snapshot: Snapshot) async throws {
+        LoggerService.shared.info("Deleting snapshot: \(snapshot.name) (\(snapshot.id))", category: "SnapshotManager")
+        
+        LoggerService.shared.debug("Deleting from repository", category: "SnapshotManager")
         try await repository.delete(snapshot)
+        LoggerService.shared.info("Snapshot deleted from database: \(snapshot.id)", category: "SnapshotManager")
+        
         snapshots.removeAll { $0.id == snapshot.id }
         notifySnapshotsChanged()
     }
@@ -107,11 +127,16 @@ final class SnapshotManager: ObservableObject {
     ///   - snapshot: The snapshot to modify
     ///   - appName: App name to remove
     func removeAppFromSnapshot(_ snapshot: Snapshot, appName: String) async throws {
+        LoggerService.shared.info("Removing app '\(appName)' from snapshot: \(snapshot.name)", category: "SnapshotManager")
+        
         let updated = snapshot.removing(appName: appName)
+        LoggerService.shared.debug("Updating snapshot in repository", category: "SnapshotManager")
         try await repository.update(updated)
+        LoggerService.shared.info("Snapshot updated in database after removing app: \(appName)", category: "SnapshotManager")
         
         if let index = snapshots.firstIndex(where: { $0.id == snapshot.id }) {
             snapshots[index] = updated
+            LoggerService.shared.debug("Updated snapshot in memory at index: \(index)", category: "SnapshotManager")
         }
         notifySnapshotsChanged()
     }
@@ -121,6 +146,8 @@ final class SnapshotManager: ObservableObject {
     ///   - snapshot: The snapshot to rename
     ///   - newName: New name
     func renameSnapshot(_ snapshot: Snapshot, newName: String) async throws {
+        LoggerService.shared.info("Renaming snapshot: \(snapshot.name) -> \(newName)", category: "SnapshotManager")
+        
         var updated = snapshot
         updated = Snapshot(
             id: snapshot.id,
@@ -132,7 +159,9 @@ final class SnapshotManager: ObservableObject {
             metadata: snapshot.metadata
         )
         
+        LoggerService.shared.debug("Updating snapshot in repository", category: "SnapshotManager")
         try await repository.update(updated)
+        LoggerService.shared.info("Snapshot renamed in database: \(snapshot.id)", category: "SnapshotManager")
         
         if let index = snapshots.firstIndex(where: { $0.id == snapshot.id }) {
             snapshots[index] = updated

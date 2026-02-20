@@ -6,6 +6,7 @@
 //
 
 import AppKit
+import Foundation
 import SwiftUI
 
 // MARK: - ContentView
@@ -32,11 +33,12 @@ struct ContentView: View {
             }
         }
         .onAppear {
-            // Refresh windows on appear
+            LoggerService.shared.info("ContentView appeared", category: "ContentView")
+            LoggerService.shared.debug("Permission state - allGranted: \(permissionManager.allPermissionsGranted)", category: "ContentView")
             windowViewModel.refresh()
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            // Refresh when app becomes active
+            LoggerService.shared.debug("App became active, refreshing windows", category: "ContentView")
             windowViewModel.refresh()
         }
         .sheet(isPresented: $snapshotViewModel.showSaveSheet) {
@@ -69,7 +71,6 @@ struct ContentView: View {
                 .navigationTitle("Current Windows")
                 .toolbar {
                     ToolbarItemGroup {
-                        // Status indicator
                         if windowViewModel.isLoading {
                             ProgressView()
                                 .scaleEffect(0.7)
@@ -90,9 +91,20 @@ struct ContentView: View {
                         .help("Save current layout as snapshot")
                     }
                 }
-        } detail: {
+        } content: {
             SnapshotListView()
                 .navigationTitle("Saved Snapshots")
+        } detail: {
+            if let snapshot = snapshotViewModel.selectedSnapshot {
+                SnapshotDetailView(snapshot: snapshot) {
+                    snapshotViewModel.selectedSnapshot = nil
+                }
+                .environmentObject(snapshotViewModel)
+            } else {
+                Text("Select a snapshot to view details")
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
     }
 }

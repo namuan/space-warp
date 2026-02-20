@@ -6,6 +6,7 @@
 //
 
 import AppKit
+import Foundation
 import SwiftUI
 
 // MARK: - AppDelegate
@@ -21,16 +22,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Lifecycle
     
     func applicationDidFinishLaunching(_ notification: Notification) {
+        LoggerService.shared.info("Application finished launching", category: "AppDelegate")
         setupMenuBar()
         setupHotkeys()
         checkLaunchOptions()
+        LoggerService.shared.debug("Application initialization complete", category: "AppDelegate")
     }
     
     func applicationWillTerminate(_ notification: Notification) {
+        LoggerService.shared.info("Application will terminate", category: "AppDelegate")
         HotkeyManager.shared.unregisterAll()
+        LoggerService.shared.debug("Unregistered all hotkeys", category: "AppDelegate")
     }
     
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        LoggerService.shared.info("Application reopen requested - hasVisibleWindows: \(flag)", category: "AppDelegate")
         if !flag {
             showMainWindow()
         }
@@ -191,6 +197,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     
     @objc
     func saveSnapshot() {
+        LoggerService.shared.info("Menu bar action: Save Snapshot triggered", category: "AppDelegate")
         Task { @MainActor in
             await dependencyContainer.snapshotViewModel.saveQuickSnapshot()
         }
@@ -198,6 +205,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     
     @objc
     func restoreLastSnapshot() {
+        LoggerService.shared.info("Menu bar action: Restore Last Snapshot triggered", category: "AppDelegate")
         Task { @MainActor in
             await dependencyContainer.snapshotViewModel.restoreLastSnapshot()
         }
@@ -205,8 +213,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     
     @objc
     func restoreSnapshot(_ sender: NSMenuItem) {
-        guard let snapshot = sender.representedObject as? Snapshot else { return }
+        guard let snapshot = sender.representedObject as? Snapshot else { 
+            LoggerService.shared.error("restoreSnapshot called but no snapshot in sender", category: "AppDelegate")
+            return 
+        }
         
+        LoggerService.shared.info("Menu bar action: Restore snapshot '\(snapshot.name)' triggered", category: "AppDelegate")
         Task { @MainActor in
             await dependencyContainer.snapshotViewModel.restoreSnapshot(snapshot)
         }
@@ -214,20 +226,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     
     @objc
     func showMainWindow() {
+        LoggerService.shared.info("Menu bar action: Show Window triggered", category: "AppDelegate")
         NSApp.activate(ignoringOtherApps: true)
         
         if let window = NSApp.windows.first(where: { $0.contentView?.subviews.first is NSHostingView<ContentView> }) {
             window.makeKeyAndOrderFront(nil)
+            LoggerService.shared.debug("Main window shown and brought to front", category: "AppDelegate")
+        } else {
+            LoggerService.shared.debug("Main window not found", category: "AppDelegate")
         }
     }
     
     @objc
     func openSettings() {
+        LoggerService.shared.info("Menu bar action: Settings triggered", category: "AppDelegate")
         NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
     }
     
     @objc
     func quitApp() {
+        LoggerService.shared.info("Menu bar action: Quit triggered", category: "AppDelegate")
         NSApp.terminate(nil)
     }
 }

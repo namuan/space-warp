@@ -6,6 +6,7 @@
 //
 
 import AppKit
+import Foundation
 import SwiftUI
 
 // MARK: - SnapshotListView
@@ -19,49 +20,22 @@ struct SnapshotListView: View {
                 SnapshotCard(snapshot: snapshot)
                     .tag(snapshot)
                     .contextMenu {
-                        Button {
-                            Task { await snapshotViewModel.restoreSnapshot(snapshot) }
-                        } label: {
-                            Label("Restore", systemImage: "arrow.counterclockwise")
-                        }
-                        
-                        Divider()
-                        
-                        Button(role: .destructive) {
-                            Task { await snapshotViewModel.deleteSnapshot(snapshot) }
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
+                        snapshotContextMenu(for: snapshot)
                     }
             }
         }
         .listStyle(.inset)
+        .onChange(of: snapshotViewModel.selectedSnapshot) { newValue in
+            handleSelectionChange(newValue)
+        }
         .overlay {
-            if snapshotViewModel.snapshots.isEmpty {
-                VStack(spacing: 16) {
-                    Image(systemName: "camera.aperture")
-                        .font(.system(size: 48))
-                        .foregroundColor(.secondary)
-                    
-                    Text("No Snapshots")
-                        .font(.title2)
-                        .foregroundColor(.secondary)
-                    
-                    Text("Save a snapshot to preserve your current window layout")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    
-                    Button("Save Snapshot") {
-                        snapshotViewModel.showSaveSheet = true
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-            }
+            emptyOverlay
         }
         .toolbar {
             ToolbarItemGroup {
                 Button {
                     if let snapshot = snapshotViewModel.selectedSnapshot {
+                        LoggerService.shared.info("Toolbar 'Restore' clicked for snapshot: \(snapshot.name)", category: "SnapshotListView")
                         Task { await snapshotViewModel.restoreSnapshot(snapshot) }
                     }
                 } label: {
@@ -71,12 +45,65 @@ struct SnapshotListView: View {
                 
                 Button(role: .destructive) {
                     if let snapshot = snapshotViewModel.selectedSnapshot {
+                        LoggerService.shared.info("Toolbar 'Delete' clicked for snapshot: \(snapshot.name)", category: "SnapshotListView")
                         Task { await snapshotViewModel.deleteSnapshot(snapshot) }
                     }
                 } label: {
                     Label("Delete", systemImage: "trash")
                 }
                 .disabled(snapshotViewModel.selectedSnapshot == nil)
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func snapshotContextMenu(for snapshot: Snapshot) -> some View {
+        Button {
+            LoggerService.shared.info("Context menu 'Restore' selected for snapshot: \(snapshot.name)", category: "SnapshotListView")
+            Task { await snapshotViewModel.restoreSnapshot(snapshot) }
+        } label: {
+            Label("Restore", systemImage: "arrow.counterclockwise")
+        }
+        
+        Divider()
+        
+        Button(role: .destructive) {
+            LoggerService.shared.info("Context menu 'Delete' selected for snapshot: \(snapshot.name)", category: "SnapshotListView")
+            Task { await snapshotViewModel.deleteSnapshot(snapshot) }
+        } label: {
+            Label("Delete", systemImage: "trash")
+        }
+    }
+    
+    private func handleSelectionChange(_ newValue: Snapshot?) {
+        if let snapshot = newValue {
+            LoggerService.shared.info("Snapshot selected: \(snapshot.name)", category: "SnapshotListView")
+            LoggerService.shared.debug("Selected snapshot details - windows: \(snapshot.windowCount), displays: \(snapshot.displayCount)", category: "SnapshotListView")
+        } else {
+            LoggerService.shared.info("Snapshot selection cleared", category: "SnapshotListView")
+        }
+    }
+    
+    @ViewBuilder
+    private var emptyOverlay: some View {
+        if snapshotViewModel.snapshots.isEmpty {
+            VStack(spacing: 16) {
+                Image(systemName: "camera.aperture")
+                    .font(.system(size: 48))
+                    .foregroundColor(.secondary)
+                
+                Text("No Snapshots")
+                    .font(.title2)
+                    .foregroundColor(.secondary)
+                
+                Text("Save a snapshot to preserve your current window layout")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                
+                Button("Save Snapshot") {
+                    snapshotViewModel.showSaveSheet = true
+                }
+                .buttonStyle(.borderedProminent)
             }
         }
     }
@@ -116,7 +143,6 @@ struct SnapshotCard: View {
             }
             .foregroundColor(.secondary)
             
-            // App badges
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 4) {
                     ForEach(snapshot.uniqueAppNames.prefix(5), id: \.self) { appName in
