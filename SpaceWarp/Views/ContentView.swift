@@ -98,7 +98,7 @@ struct ContentView: View {
                 .navigationSplitViewColumnWidth(min: 300, ideal: 400, max: 500)
         } detail: {
             if let snapshot = snapshotViewModel.selectedSnapshot {
-                SnapshotDetailView(snapshot: snapshot) {
+                SnapshotDetailView(snapshotId: snapshot.id) {
                     snapshotViewModel.selectedSnapshot = nil
                 }
                 .environmentObject(snapshotViewModel)
