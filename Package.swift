@@ -33,6 +33,10 @@ let package = Package(
                 .product(name: "Defaults", package: "Defaults")
             ],
             path: "SpaceWarp",
+            exclude: [
+                "Resources/Info.plist",
+                "Resources/SpaceWarp.entitlements"
+            ],
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency")
             ]
