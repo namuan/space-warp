@@ -137,7 +137,7 @@ final class SnapshotRepository {
         try dbQueue.write { db in
             try db.create(table: "snapshots", ifNotExists: true) { table in
                 table.column("id", .text).primaryKey()
-                table.column("name", .text).notNull().unique()
+                table.column("name", .text).notNull()
                 table.column("description_text", .text).notNull().defaults(to: "")
                 table.column("created_at", .datetime).notNull()
                 table.column("windows_json", .text).notNull()
@@ -145,9 +145,16 @@ final class SnapshotRepository {
                 table.column("metadata_json", .text)
                 table.column("is_active", .boolean).notNull().defaults(to: true)
             }
-            
+
             // Create indexes
-            try db.create(index: "idx_snapshots_name", on: "snapshots", columns: ["name"], ifNotExists: true)
+            // Partial unique index: only enforce name uniqueness for active snapshots
+            // This allows reusing names after soft-deleting a snapshot
+            try db.create(index: "idx_snapshots_name_unique",
+                          on: "snapshots",
+                          columns: ["name"],
+                          unique: true,
+                          ifNotExists: true,
+                          condition: Column.isActive == true)
             try db.create(index: "idx_snapshots_active", on: "snapshots", columns: ["is_active"], ifNotExists: true)
             try db.create(index: "idx_snapshots_created", on: "snapshots", columns: ["created_at"], ifNotExists: true)
         }
