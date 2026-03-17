@@ -2,31 +2,34 @@ import Foundation
 import SwiftUI
 
 struct SnapshotDetailView: View {
-    let snapshot: Snapshot
+    let snapshotId: UUID
     let onBack: () -> Void
-    
+
     @EnvironmentObject private var snapshotViewModel: SnapshotViewModel
     @State private var appToDelete: String?
     @State private var showingDeleteConfirmation = false
     @State private var isDeleting = false
-    @State private var errorMessage: String?
-    @State private var showingError = false
-    
-    private var windowsGroupedByApp: [String: [WindowInfo]] {
-        Dictionary(grouping: snapshot.windows, by: \.appName)
+
+    private var snapshot: Snapshot? {
+        snapshotViewModel.snapshots.first(where: { $0.id == snapshotId })
     }
-    
+
+    private var windowsGroupedByApp: [String: [WindowInfo]] {
+        Dictionary(grouping: snapshot?.windows ?? [], by: \.appName)
+    }
+
     private var sortedAppNames: [String] {
         windowsGroupedByApp.keys.sorted()
     }
-    
-    init(snapshot: Snapshot, onBack: @escaping () -> Void) {
-        self.snapshot = snapshot
+
+    init(snapshotId: UUID, onBack: @escaping () -> Void) {
+        self.snapshotId = snapshotId
         self.onBack = onBack
         LoggerService.shared.info("SnapshotDetailView initializing", category: "SnapshotDetailView")
     }
     
     private func logSnapshotData() {
+        guard let snapshot = snapshot else { return }
         LoggerService.shared.info("Displaying snapshot: \(snapshot.name)", category: "SnapshotDetailView")
         LoggerService.shared.debug("Snapshot details - windowCount: \(snapshot.windowCount), displayCount: \(snapshot.displayCount), createdAt: \(snapshot.createdAt)", category: "SnapshotDetailView")
         LoggerService.shared.debug("App names: \(sortedAppNames.joined(separator: ", "))", category: "SnapshotDetailView")
@@ -37,7 +40,7 @@ struct SnapshotDetailView: View {
             VStack(alignment: .leading, spacing: 20) {
                 headerSection
                 
-                if snapshot.windows.isEmpty {
+                if sortedAppNames.isEmpty {
                     emptyStateView
                 } else {
                     appsListView
@@ -63,15 +66,6 @@ struct SnapshotDetailView: View {
         } message: {
             if let appName = appToDelete {
                 Text("Are you sure you want to remove all windows from \"\(appName)\"? This cannot be undone.")
-            }
-        }
-        .alert("Error", isPresented: $showingError) {
-            Button("OK", role: .cancel) {
-                errorMessage = nil
-            }
-        } message: {
-            if let error = errorMessage {
-                Text(error)
             }
         }
         .disabled(isDeleting)
@@ -103,27 +97,29 @@ struct SnapshotDetailView: View {
                 Spacer()
             }
             
-            Text(snapshot.name)
+            Text(snapshot?.name ?? "")
                 .font(.title2)
                 .fontWeight(.bold)
-            
-            if !snapshot.description.isEmpty {
-                Text(snapshot.description)
+
+            if let description = snapshot?.description, !description.isEmpty {
+                Text(description)
                     .font(.body)
                     .foregroundColor(.secondary)
             }
-            
+
             HStack(spacing: 12) {
-                Label {
-                    Text(snapshot.createdAt, style: .date)
-                } icon: {
-                    Image(systemName: "calendar")
+                if let createdAt = snapshot?.createdAt {
+                    Label {
+                        Text(createdAt, style: .date)
+                    } icon: {
+                        Image(systemName: "calendar")
+                    }
+                    .font(.caption)
+                    .foregroundColor(.secondary)
                 }
-                .font(.caption)
-                .foregroundColor(.secondary)
-                
+
                 Label {
-                    Text("\(snapshot.windowCount) windows")
+                    Text("\(snapshot?.windowCount ?? 0) windows")
                 } icon: {
                     Image(systemName: "rectangle.on.rectangle")
                 }
@@ -179,24 +175,20 @@ struct SnapshotDetailView: View {
     }
     
     private func removeApp(_ appName: String) async {
+        guard let snapshot = snapshot else { return }
         LoggerService.shared.info("Starting removeApp for app: \(appName) from snapshot: \(snapshot.name)", category: "SnapshotDetailView")
         isDeleting = true
-        defer { 
+        defer {
             isDeleting = false
             LoggerService.shared.debug("removeApp completed for app: \(appName)", category: "SnapshotDetailView")
         }
-        
+
         await snapshotViewModel.removeApp(appName: appName, from: snapshot)
-        
-        if let error = snapshotViewModel.errorMessage {
-            LoggerService.shared.error("Failed to remove app \(appName): \(error)", category: "SnapshotDetailView")
-            errorMessage = error
-            showingError = true
-        } else {
-            LoggerService.shared.info("Successfully removed app: \(appName), calling onBack", category: "SnapshotDetailView")
-            onBack()
+
+        if snapshotViewModel.errorMessage == nil {
+            LoggerService.shared.info("Successfully removed app: \(appName)", category: "SnapshotDetailView")
         }
-        
+
         appToDelete = nil
     }
 }
@@ -392,16 +384,16 @@ struct WindowRowView: View {
     
     Group {
         SnapshotDetailView(
-            snapshot: sampleSnapshot,
+            snapshotId: sampleSnapshot.id,
             onBack: { print("Back tapped") }
         )
         .environmentObject(SnapshotViewModel(
             snapshotManager: SnapshotManager(configManager: ConfigManager()),
             windowManager: WindowManager()
         ))
-        
+
         SnapshotDetailView(
-            snapshot: emptySnapshot,
+            snapshotId: emptySnapshot.id,
             onBack: { print("Back tapped") }
         )
         .environmentObject(SnapshotViewModel(

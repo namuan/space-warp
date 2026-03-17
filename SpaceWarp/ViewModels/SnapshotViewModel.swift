@@ -152,6 +152,7 @@ final class SnapshotViewModel: ObservableObject {
     ///   - snapshot: Snapshot to modify
     func removeApp(appName: String, from snapshot: Snapshot) async {
         LoggerService.shared.info("Starting removeApp: \(appName) from snapshot: \(snapshot.name)", category: "SnapshotViewModel")
+        errorMessage = nil
         do {
             try await snapshotManager.removeAppFromSnapshot(snapshot, appName: appName)
             LoggerService.shared.info("Successfully removed app: \(appName) from snapshot: \(snapshot.name)", category: "SnapshotViewModel")
