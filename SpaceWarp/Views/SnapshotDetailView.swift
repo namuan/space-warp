@@ -301,6 +301,9 @@ struct WindowRowView: View {
     }
 }
 
+// MARK: - Preview
+
+#if canImport(DeveloperToolsSupport)
 #Preview {
     let sampleSnapshot = Snapshot(
         id: UUID(),
@@ -407,3 +410,4 @@ struct WindowRowView: View {
         ))
     }
 }
+#endif

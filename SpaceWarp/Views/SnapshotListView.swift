@@ -179,6 +179,7 @@ struct AppBadge: View {
 
 // MARK: - Preview
 
+#if canImport(DeveloperToolsSupport)
 #Preview {
     SnapshotListView()
         .frame(width: 500, height: 600)
@@ -187,3 +188,4 @@ struct AppBadge: View {
             windowManager: WindowManager()
         ))
 }
+#endif

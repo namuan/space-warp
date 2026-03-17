@@ -268,7 +268,9 @@ struct AdvancedSettingsView: View {
 
 // MARK: - Preview
 
+#if canImport(DeveloperToolsSupport)
 #Preview {
     SettingsView()
         .environmentObject(SettingsViewModel(configManager: ConfigManager()))
 }
+#endif

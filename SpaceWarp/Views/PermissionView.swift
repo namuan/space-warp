@@ -126,7 +126,9 @@ struct PermissionRow: View {
 
 // MARK: - Preview
 
+#if canImport(DeveloperToolsSupport)
 #Preview {
     PermissionView()
         .environmentObject(PermissionManager())
 }
+#endif
