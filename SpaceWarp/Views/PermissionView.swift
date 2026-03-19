@@ -124,4 +124,3 @@ struct PermissionRow: View {
     }
 }
 
-// MARK: - Preview

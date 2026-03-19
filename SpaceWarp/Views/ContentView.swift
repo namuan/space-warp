@@ -229,4 +229,3 @@ struct RestoreReportView: View {
     }
 }
 
-// MARK: - Preview

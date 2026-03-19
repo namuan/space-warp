@@ -188,4 +188,3 @@ extension WindowViewModel {
     }
 }
 
-// MARK: - Preview

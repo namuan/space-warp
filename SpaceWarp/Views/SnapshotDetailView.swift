@@ -293,4 +293,3 @@ struct WindowRowView: View {
     }
 }
 
-// MARK: - Preview

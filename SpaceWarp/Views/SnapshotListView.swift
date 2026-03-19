@@ -177,4 +177,3 @@ struct AppBadge: View {
     }
 }
 
-// MARK: - Preview
