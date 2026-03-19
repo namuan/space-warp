@@ -189,12 +189,3 @@ extension WindowViewModel {
 }
 
 // MARK: - Preview
-
-#if canImport(DeveloperToolsSupport)
-#Preview {
-    WindowListView()
-        .frame(width: 300, height: 500)
-        .environmentObject(WindowViewModel(windowManager: WindowManager()))
-        .environmentObject(PermissionManager())
-}
-#endif

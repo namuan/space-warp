@@ -230,15 +230,3 @@ struct RestoreReportView: View {
 }
 
 // MARK: - Preview
-
-#if canImport(DeveloperToolsSupport)
-#Preview {
-    ContentView()
-        .environmentObject(WindowViewModel(windowManager: WindowManager()))
-        .environmentObject(SnapshotViewModel(
-            snapshotManager: SnapshotManager(configManager: ConfigManager()),
-            windowManager: WindowManager()
-        ))
-        .environmentObject(PermissionManager())
-}
-#endif

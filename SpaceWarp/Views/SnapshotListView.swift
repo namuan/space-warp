@@ -178,14 +178,3 @@ struct AppBadge: View {
 }
 
 // MARK: - Preview
-
-#if canImport(DeveloperToolsSupport)
-#Preview {
-    SnapshotListView()
-        .frame(width: 500, height: 600)
-        .environmentObject(SnapshotViewModel(
-            snapshotManager: SnapshotManager(configManager: ConfigManager()),
-            windowManager: WindowManager()
-        ))
-}
-#endif
